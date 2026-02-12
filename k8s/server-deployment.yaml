@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canteen-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: canteen-server
+  template:
+    metadata:
+      labels:
+        app: canteen-server
+    spec:
+      containers:
+      - name: canteen-server
+        image: crymall/canteen-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: DB_HOST
+          value: "canteen-postgres-service"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: password
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: dbname
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: jwt_secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: canteen-service
+spec:
+  ports:
+  - port: 3000
+  selector:
+    app: canteen-server

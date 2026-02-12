@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: canteen-postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canteen-postgres
+spec:
+  selector:
+    matchLabels:
+      app: canteen-postgres
+  template:
+    metadata:
+      labels:
+        app: canteen-postgres
+    spec:
+      containers:
+      - name: canteen-postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: password
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: canteen-secrets
+              key: dbname
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: canteen-postgres-storage
+      volumes:
+      - name: canteen-postgres-storage
+        persistentVolumeClaim:
+          claimName: canteen-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: canteen-postgres-service
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: postgres
