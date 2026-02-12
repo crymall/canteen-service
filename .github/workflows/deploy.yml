@@ -48,6 +48,6 @@ jobs:
 
     - name: Deploy to Kubernetes
       run: |
-        sed -i 's|crymall/canteen-server:latest|crymall/canteen-server:${{ github.sha }}|g' k8s/server-deployment.yaml
+        sed -i 's|crymall/canteen-server:.*|crymall/canteen-server:${{ github.sha }}|g' k8s/server-deployment.yaml
         kubectl apply -f k8s/
         kubectl rollout status deployment/canteen-server
