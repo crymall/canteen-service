@@ -1,9 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import pool from '../config/db.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fs = require('fs');
+const path = require('path');
+const pool = require('../config/db');
 
 const schemaPath = path.join(__dirname, 'schema.sql');
 const seedsPath = path.join(__dirname, 'seeds.sql');
@@ -23,6 +20,10 @@ const runMigrations = async () => {
         retries -= 1;
         await new Promise((res) => setTimeout(res, 5000));
       }
+    }
+
+    if (retries === 0) {
+        throw new Error("Could not connect to database after 5 attempts");
     }
 
     console.log('Starting database initialization...');

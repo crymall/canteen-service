@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: canteen-server
-        image: crymall/canteen-server:latest
+        image: crymall/canteen-server:v1
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
