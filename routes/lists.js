@@ -1,9 +1,10 @@
 var express = require('express');
 var router = express.Router();
 var pool = require('../config/db');
+var { authenticateToken, authorizePermission } = require('../middleware/authorize');
 
 /* GET lists listing. */
-router.get('/', async function(req, res, next) {
+router.get('/', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -15,7 +16,7 @@ router.get('/', async function(req, res, next) {
 });
 
 /* GET lists for a specific user. */
-router.get('/user/:userId', async function(req, res, next) {
+router.get('/user/:userId', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
   try {
     const { userId } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
@@ -28,7 +29,7 @@ router.get('/user/:userId', async function(req, res, next) {
 });
 
 /* GET single list. */
-router.get('/:id', async function(req, res, next) {
+router.get('/:id', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM lists WHERE id = $1', [id]);
@@ -42,7 +43,7 @@ router.get('/:id', async function(req, res, next) {
 });
 
 /* DELETE list. */
-router.delete('/:id', async function(req, res, next) {
+router.delete('/:id', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
     const result = await pool.query('DELETE FROM lists WHERE id = $1 RETURNING *', [id]);
@@ -56,7 +57,7 @@ router.delete('/:id', async function(req, res, next) {
 });
 
 /* POST new list. */
-router.post('/', async function(req, res, next) {
+router.post('/', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
     const { user_id, name } = req.body;
     const result = await pool.query('INSERT INTO lists (user_id, name) VALUES ($1, $2) RETURNING *', [user_id, name]);
@@ -67,7 +68,7 @@ router.post('/', async function(req, res, next) {
 });
 
 /* GET recipes in list. */
-router.get('/:id/recipes', async function(req, res, next) {
+router.get('/:id/recipes', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
@@ -86,7 +87,7 @@ router.get('/:id/recipes', async function(req, res, next) {
 });
 
 /* POST add recipe to list. */
-router.post('/:id/recipes', async function(req, res, next) {
+router.post('/:id/recipes', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
     const { recipe_id } = req.body;

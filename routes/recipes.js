@@ -1,9 +1,10 @@
 var express = require('express');
 var router = express.Router();
 var pool = require('../config/db');
+var { authenticateToken, authorizePermission } = require('../middleware/authorize');
 
 /* GET recipes listing. */
-router.get('/', async function(req, res, next) {
+router.get('/', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -15,7 +16,7 @@ router.get('/', async function(req, res, next) {
 });
 
 /* GET single recipe. */
-router.get('/:id', async function(req, res, next) {
+router.get('/:id', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
     const query = `
@@ -64,7 +65,7 @@ router.get('/:id', async function(req, res, next) {
 });
 
 /* POST new recipe. */
-router.post('/', async function(req, res, next) {
+router.post('/', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
     const { author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, servings } = req.body;
     const result = await pool.query(
@@ -78,7 +79,7 @@ router.post('/', async function(req, res, next) {
 });
 
 /* POST like recipe. */
-router.post('/:id/likes', async function(req, res, next) {
+router.post('/:id/likes', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
     const { user_id } = req.body;

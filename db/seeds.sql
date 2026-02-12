@@ -1,7 +1,7 @@
 -- Insert Users (Hardcoded UUIDs for referencing)
 INSERT INTO users (id, iam_id, username) VALUES 
 (1, '13', 'crymall'),
-(2, '2', 'bob_editor');
+(2, '2', 'test');
 
 -- Insert Ingredients
 INSERT INTO ingredients (name) VALUES 

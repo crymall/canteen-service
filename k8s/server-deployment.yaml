@@ -19,6 +19,13 @@ spec:
         ports:
         - containerPort: 3000
         env:
+        - name: MIDDEN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: midden-global-secrets
+              key: midden_api_key
+        - name: PORT
+          value: "3000"
         - name: DB_HOST
           value: "canteen-postgres-service"
         - name: DB_USER

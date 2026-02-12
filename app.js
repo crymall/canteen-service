@@ -1,3 +1,4 @@
+require('dotenv').config();
 var express = require('express');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
@@ -8,6 +9,7 @@ var recipesRouter = require('./routes/recipes');
 var ingredientsRouter = require('./routes/ingredients');
 var tagsRouter = require('./routes/tags');
 var listsRouter = require('./routes/lists');
+var usersRouter = require('./routes/users');
 
 var app = express();
 
@@ -25,5 +27,6 @@ app.use('/recipes', recipesRouter);
 app.use('/ingredients', ingredientsRouter);
 app.use('/tags', tagsRouter);
 app.use('/lists', listsRouter);
+app.use('/users', usersRouter);
 
 module.exports = app;
