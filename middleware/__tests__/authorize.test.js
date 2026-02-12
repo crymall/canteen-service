@@ -17,7 +17,7 @@ describe('Authorization Middleware', () => {
     next = jest.fn();
     jest.clearAllMocks();
     process.env.JWT_SECRET = 'test_secret';
-    process.env.IAM_API_KEY = 'test_api_key';
+    process.env.MIDDEN_API_KEY = 'test_api_key';
   });
 
   describe('authenticateToken', () => {

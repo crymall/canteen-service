@@ -9,6 +9,7 @@ jest.mock('../../config/db', () => ({
 jest.mock('../../middleware/authorize', () => ({
   authenticateToken: (req, res, next) => next(),
   authorizePermission: (permission) => (req, res, next) => next(),
+  authenticateApiKey: (req, res, next) => next(),
 }));
 
 describe('Ingredients Routes', () => {
