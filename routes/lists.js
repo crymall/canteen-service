@@ -46,9 +46,9 @@ router.get('/:id', authenticateToken, authorizePermission('read:canteen'), async
 router.delete('/:id', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM lists WHERE id = $1 RETURNING *', [id]);
+    const result = await pool.query('DELETE FROM lists WHERE id = $1 AND user_id = $2 RETURNING *', [id, req.user.id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'List not found' });
+      return res.status(404).json({ error: 'List not found or unauthorized' });
     }
     res.json({ message: 'List deleted successfully', list: result.rows[0] });
   } catch (err) {
@@ -59,8 +59,8 @@ router.delete('/:id', authenticateToken, authorizePermission('write:canteen'), a
 /* POST new list. */
 router.post('/', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
   try {
-    const { user_id, name } = req.body;
-    const result = await pool.query('INSERT INTO lists (user_id, name) VALUES ($1, $2) RETURNING *', [user_id, name]);
+    const { name } = req.body;
+    const result = await pool.query('INSERT INTO lists (user_id, name) VALUES ($1, $2) RETURNING *', [req.user.id, name]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     next(err);
@@ -91,8 +91,34 @@ router.post('/:id/recipes', authenticateToken, authorizePermission('write:cantee
   try {
     const { id } = req.params;
     const { recipe_id } = req.body;
-    const result = await pool.query('INSERT INTO list_recipes (list_id, recipe_id) VALUES ($1, $2) RETURNING *', [id, recipe_id]);
+    const result = await pool.query(
+      `INSERT INTO list_recipes (list_id, recipe_id)
+       SELECT $1, $2
+       WHERE EXISTS (SELECT 1 FROM lists WHERE id = $1 AND user_id = $3)
+       RETURNING *`,
+      [id, recipe_id, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'List not found or unauthorized' });
+    }
     res.status(201).json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* DELETE remove recipe from list. */
+router.delete('/:id/recipes/:recipeId', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
+  try {
+    const { id, recipeId } = req.params;
+    const result = await pool.query(
+      'DELETE FROM list_recipes lr USING lists l WHERE lr.list_id = l.id AND lr.list_id = $1 AND lr.recipe_id = $2 AND l.user_id = $3 RETURNING lr.*',
+      [id, recipeId, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Recipe not found in list or unauthorized' });
+    }
+    res.json({ message: 'Recipe removed from list' });
   } catch (err) {
     next(err);
   }
