@@ -18,18 +18,19 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const authorizePermission = (requiredPermission) => {
+const authorizePermissions = (allowedPermissions) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: "User not authenticated" });
     }
 
     const userPermissions = req.user.permissions || [];
+    const permissionsAreAcceptable = allowedPermissions.some(permission => userPermissions.includes(permission));
 
-    if (!userPermissions.includes(requiredPermission)) {
+    if (!permissionsAreAcceptable) {
       return res.status(403).json({ 
         error: "Forbidden: You do not have permission to perform this action",
-        required: requiredPermission
+        required: allowedPermissions
       });
     }
 
@@ -48,4 +49,4 @@ const authenticateApiKey = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticateToken, authorizePermission, authenticateApiKey };
+module.exports = { authenticateToken, authorizePermissions, authenticateApiKey };

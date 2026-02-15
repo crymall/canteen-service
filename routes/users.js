@@ -1,10 +1,10 @@
 var express = require('express');
 var router = express.Router();
 var pool = require('../config/db');
-var { authenticateToken, authorizePermission, authenticateApiKey } = require('../middleware/authorize');
+var { authenticateToken, authorizePermissions, authenticateApiKey } = require('../middleware/authorize');
 
 /* GET users listing. */
-router.get('/', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
+router.get('/', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -15,7 +15,7 @@ router.get('/', authenticateToken, authorizePermission('read:canteen'), async fu
   }
 });
 
-router.get('/:id', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
+router.get('/:id', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);

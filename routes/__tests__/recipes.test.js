@@ -11,7 +11,7 @@ jest.mock('../../middleware/authorize', () => ({
     req.user = { id: 1 };
     next();
   },
-  authorizePermission: (permission) => (req, res, next) => next(),
+  authorizePermissions: (permissions) => (req, res, next) => next(),
   authenticateApiKey: (req, res, next) => next(),
 }));
 

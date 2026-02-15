@@ -1,10 +1,10 @@
 var express = require('express');
 var router = express.Router();
 var pool = require('../config/db');
-var { authenticateToken, authorizePermission } = require('../middleware/authorize');
+var { authenticateToken, authorizePermissions } = require('../middleware/authorize');
 
 /* GET lists listing. */
-router.get('/', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
+router.get('/', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -16,7 +16,7 @@ router.get('/', authenticateToken, authorizePermission('read:canteen'), async fu
 });
 
 /* GET lists for a specific user. */
-router.get('/user/:userId', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
+router.get('/user/:userId', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
   try {
     const { userId } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
@@ -29,7 +29,7 @@ router.get('/user/:userId', authenticateToken, authorizePermission('read:canteen
 });
 
 /* GET single list. */
-router.get('/:id', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
+router.get('/:id', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM lists WHERE id = $1', [id]);
@@ -43,7 +43,7 @@ router.get('/:id', authenticateToken, authorizePermission('read:canteen'), async
 });
 
 /* DELETE list. */
-router.delete('/:id', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
+router.delete('/:id', authenticateToken, authorizePermissions(['write:canteen']), async function(req, res, next) {
   try {
     const { id } = req.params;
     const result = await pool.query('DELETE FROM lists WHERE id = $1 AND user_id = $2 RETURNING *', [id, req.user.id]);
@@ -57,7 +57,7 @@ router.delete('/:id', authenticateToken, authorizePermission('write:canteen'), a
 });
 
 /* POST new list. */
-router.post('/', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
+router.post('/', authenticateToken, authorizePermissions(['write:canteen']), async function(req, res, next) {
   try {
     const { name } = req.body;
     const result = await pool.query('INSERT INTO lists (user_id, name) VALUES ($1, $2) RETURNING *', [req.user.id, name]);
@@ -68,7 +68,7 @@ router.post('/', authenticateToken, authorizePermission('write:canteen'), async 
 });
 
 /* GET recipes in list. */
-router.get('/:id/recipes', authenticateToken, authorizePermission('read:canteen'), async function(req, res, next) {
+router.get('/:id/recipes', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
   try {
     const { id } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
@@ -87,7 +87,7 @@ router.get('/:id/recipes', authenticateToken, authorizePermission('read:canteen'
 });
 
 /* POST add recipe to list. */
-router.post('/:id/recipes', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
+router.post('/:id/recipes', authenticateToken, authorizePermissions(['write:canteen']), async function(req, res, next) {
   try {
     const { id } = req.params;
     const { recipe_id } = req.body;
@@ -108,7 +108,7 @@ router.post('/:id/recipes', authenticateToken, authorizePermission('write:cantee
 });
 
 /* DELETE remove recipe from list. */
-router.delete('/:id/recipes/:recipeId', authenticateToken, authorizePermission('write:canteen'), async function(req, res, next) {
+router.delete('/:id/recipes/:recipeId', authenticateToken, authorizePermissions(['write:canteen']), async function(req, res, next) {
   try {
     const { id, recipeId } = req.params;
     const result = await pool.query(
