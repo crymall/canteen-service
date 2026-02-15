@@ -68,6 +68,7 @@ router.get(
       const query = `
       SELECT
         r.*,
+        json_build_object('id', u.id, 'username', u.username) AS author,
         (
           SELECT COALESCE(json_agg(json_build_object(
             'id', i.id,
@@ -98,6 +99,7 @@ router.get(
           WHERE rl.recipe_id = r.id
         ) AS likes
       FROM recipes r
+      JOIN users u ON r.author_id = u.id
       WHERE 1=1 ${whereClause}
       LIMIT $${limitParam} OFFSET $${offsetParam}
     `;
@@ -121,6 +123,7 @@ router.get(
       const query = `
       SELECT
         r.*,
+        json_build_object('id', u.id, 'username', u.username) AS author,
         (
           SELECT COALESCE(json_agg(json_build_object(
             'id', i.id,
@@ -154,6 +157,7 @@ router.get(
           SELECT COUNT(*) FROM recipe_likes rl WHERE rl.recipe_id = r.id
         ) AS like_count
       FROM recipes r
+      JOIN users u ON r.author_id = u.id
       ORDER BY like_count DESC
       LIMIT $1 OFFSET $2
     `;
@@ -176,6 +180,7 @@ router.get(
       const query = `
       SELECT
         r.*,
+        json_build_object('id', u.id, 'username', u.username) AS author,
         (
           SELECT COALESCE(json_agg(json_build_object(
             'id', i.id,
@@ -206,6 +211,7 @@ router.get(
           WHERE rl.recipe_id = r.id
         ) AS likes
       FROM recipes r
+      JOIN users u ON r.author_id = u.id
       WHERE r.id = $1
     `;
       const result = await pool.query(query, [id]);

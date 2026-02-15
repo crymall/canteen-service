@@ -22,7 +22,7 @@ describe('Recipes Routes', () => {
 
   describe('GET /recipes', () => {
     it('should return a list of recipes', async () => {
-      const mockRecipes = [{ id: 1, title: 'Pancakes' }];
+      const mockRecipes = [{ id: 1, title: 'Pancakes', author: { id: 1, username: 'chef_john' } }];
       pool.query.mockResolvedValue({ rows: mockRecipes });
 
       const res = await request(app).get('/recipes');
@@ -46,6 +46,7 @@ describe('Recipes Routes', () => {
       const mockRecipe = {
         id: 1,
         title: 'Pancakes',
+        author: { id: 1, username: 'chef_john' },
         ingredients: [],
         tags: [],
         likes: []
