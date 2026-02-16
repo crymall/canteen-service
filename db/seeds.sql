@@ -7,7 +7,7 @@ INSERT INTO users (id, iam_id, username) VALUES
 INSERT INTO ingredients (name) VALUES 
 ('All-Purpose Flour'),
 ('Whole Milk'),
-('Eggs'),
+('Egg'),
 ('Salt'),
 ('Unsalted Butter'),
 ('Maple Syrup');
