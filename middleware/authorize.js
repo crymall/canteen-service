@@ -28,6 +28,7 @@ const authorizePermissions = (allowedPermissions) => {
     const permissionsAreAcceptable = allowedPermissions.some(permission => userPermissions.includes(permission));
 
     if (!permissionsAreAcceptable) {
+      console.log("BANANA", userPermissions);
       return res.status(403).json({ 
         error: "Forbidden: You do not have permission to perform this action",
         required: allowedPermissions
