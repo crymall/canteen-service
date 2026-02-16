@@ -31,11 +31,11 @@ SELECT setval('recipes_id_seq', (SELECT MAX(id) FROM recipes));
 INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES 
 (1, (SELECT id FROM ingredients WHERE name = 'All-Purpose Flour'), 1.5, 'cups', NULL),
 (1, (SELECT id FROM ingredients WHERE name = 'Whole Milk'), 1.25, 'cups', NULL),
-(1, (SELECT id FROM ingredients WHERE name = 'Eggs'), 1, 'large', NULL);
+(1, (SELECT id FROM ingredients WHERE name = 'Egg'), 1, 'large', NULL);
 
 -- Scrambled Eggs (Recipe 2)
 INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES 
-(2, (SELECT id FROM ingredients WHERE name = 'Eggs'), 3, 'large', NULL),
+(2, (SELECT id FROM ingredients WHERE name = 'Egg'), 3, 'large', NULL),
 (2, (SELECT id FROM ingredients WHERE name = 'Unsalted Butter'), 1, 'tbsp', NULL);
 
 -- Link Tags to Recipes
