@@ -1,6 +1,6 @@
 -- Insert Users (Hardcoded UUIDs for referencing)
 INSERT INTO users (id, iam_id, username) VALUES 
-(1, '13', 'crymall'),
+(1, '1', 'crymall'),
 (2, '2', 'test');
 
 -- Insert Ingredients
@@ -21,7 +21,7 @@ INSERT INTO tags (name) VALUES
 -- Insert Recipes (Using author_id from above)
 INSERT INTO recipes (id, author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, servings) VALUES 
 (1, 1, 'Classic Pancakes', 'Fluffy homemade pancakes.', '1. Mix dry ingredients.\n2. Whisk wet ingredients.\n3. Combine and cook on griddle.', 10, 15, 4),
-(2, 2, 'Scrambled Eggs', 'Creamy and soft.', '1. Whisk eggs with salt.\n2. Cook on low heat with butter.', 5, 5, 2);
+(2, 1, 'Scrambled Eggs', 'Creamy and soft.', '1. Whisk eggs with salt.\n2. Cook on low heat with butter.', 5, 5, 2);
 
 -- Reset sequence for recipes to ensure next auto-increment is correct (optional but good practice)
 SELECT setval('recipes_id_seq', (SELECT MAX(id) FROM recipes));
