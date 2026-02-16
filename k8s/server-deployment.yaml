@@ -46,7 +46,7 @@ spec:
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: canteen-secrets
+              name: midden-global-secrets
               key: jwt_secret
 ---
 apiVersion: v1
