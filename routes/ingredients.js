@@ -15,10 +15,22 @@ router.get(
     try {
       const limit = Math.min(parseInt(req.query.limit) || 50, 50);
       const offset = parseInt(req.query.offset) || 0;
-      const result = await pool.query(
-        "SELECT * FROM ingredients LIMIT $1 OFFSET $2",
-        [limit, offset],
-      );
+      const { name } = req.query;
+
+      let query = "SELECT * FROM ingredients";
+      const params = [];
+      let paramCount = 1;
+
+      if (name) {
+        query += ` WHERE name ILIKE $${paramCount}`;
+        params.push(`%${name}%`);
+        paramCount++;
+      }
+
+      query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+      params.push(limit, offset);
+
+      const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err) {
       next(err);

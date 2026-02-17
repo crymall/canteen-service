@@ -2,9 +2,17 @@ const request = require('supertest');
 const app = require('../../app');
 const pool = require('../../config/db');
 
-jest.mock('../../config/db', () => ({
-  query: jest.fn(),
-}));
+jest.mock('../../config/db', () => {
+  const mockClient = {
+    query: jest.fn(),
+    release: jest.fn(),
+  };
+  return {
+    query: jest.fn(),
+    connect: jest.fn(() => Promise.resolve(mockClient)),
+    _mockClient: mockClient,
+  };
+});
 
 jest.mock('../../middleware/authorize', () => ({
   authenticateToken: (req, res, next) => {
@@ -97,14 +105,29 @@ describe('Recipes Routes', () => {
         cook_time_minutes: 5,
         servings: 1
       };
-      pool.query.mockResolvedValue({ rows: [newRecipe] });
+      
+      pool._mockClient.query
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [newRecipe] }) // INSERT recipe
+        .mockResolvedValueOnce({ rows: [] }) // INSERT tag
+        .mockResolvedValueOnce({ rows: [] }) // INSERT ingredient
+        .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
-      const res = await request(app).post('/recipes').send(newRecipe);
+      const res = await request(app).post('/recipes').send({
+        ...newRecipe,
+        tags: [5],
+        ingredients: [{ ingredient_id: 2, quantity: 1, unit: 'cup' }]
+      });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newRecipe);
       
-      const [query, params] = pool.query.mock.calls[0];
-      expect(params[0]).toBe(1); // req.user.id used as author_id
+      const clientCalls = pool._mockClient.query.mock.calls;
+      expect(clientCalls[0][0]).toBe('BEGIN');
+      expect(clientCalls[1][0]).toContain('INSERT INTO recipes');
+      expect(clientCalls[1][1][0]).toBe(1); // req.user.id
+      expect(clientCalls[2][0]).toContain('INSERT INTO recipe_tags');
+      expect(clientCalls[3][0]).toContain('INSERT INTO recipe_ingredients');
+      expect(clientCalls[4][0]).toBe('COMMIT');
     });
   });
 

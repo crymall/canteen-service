@@ -28,6 +28,18 @@ describe('Ingredients Routes', () => {
       expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM ingredients'), expect.any(Array));
     });
 
+    it('should filter ingredients by name', async () => {
+      const mockIngredients = [{ id: 1, name: 'Salt' }];
+      pool.query.mockResolvedValue({ rows: mockIngredients });
+
+      const res = await request(app).get('/ingredients?name=Salt');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockIngredients);
+      const [query, params] = pool.query.mock.calls[0];
+      expect(query).toContain('WHERE name ILIKE $1');
+      expect(params[0]).toBe('%Salt%');
+    });
+
     it('should handle database errors', async () => {
       pool.query.mockRejectedValue(new Error('DB Error'));
       const res = await request(app).get('/ingredients');

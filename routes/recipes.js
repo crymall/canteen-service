@@ -272,7 +272,9 @@ router.post(
   authenticateToken,
   authorizePermissions(["write:canteen"]),
   async function (req, res, next) {
+    const client = await pool.connect();
     try {
+      await client.query("BEGIN");
       const {
         title,
         description,
@@ -280,8 +282,10 @@ router.post(
         prep_time_minutes,
         cook_time_minutes,
         servings,
+        tags,
+        ingredients,
       } = req.body;
-      const result = await pool.query(
+      const result = await client.query(
         "INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, servings) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
         [
           req.user.id,
@@ -293,9 +297,34 @@ router.post(
           servings,
         ],
       );
-      res.status(201).json(result.rows[0]);
+      const recipe = result.rows[0];
+
+      if (tags && Array.isArray(tags)) {
+        for (const tagId of tags) {
+          await client.query(
+            "INSERT INTO recipe_tags (recipe_id, tag_id) VALUES ($1, $2)",
+            [recipe.id, tagId],
+          );
+        }
+      }
+
+      if (ingredients && Array.isArray(ingredients)) {
+        for (const ing of ingredients) {
+          console.log("INGREDIENT", ing)
+          await client.query(
+            "INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES ($1, $2, $3, $4, $5)",
+            [recipe.id, ing.id, ing.quantity, ing.unit, ing.notes],
+          );
+        }
+      }
+
+      await client.query("COMMIT");
+      res.status(201).json(recipe);
     } catch (err) {
+      await client.query("ROLLBACK");
       next(err);
+    } finally {
+      client.release();
     }
   },
 );
