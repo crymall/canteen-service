@@ -114,6 +114,16 @@ describe('Lists Routes', () => {
       expect(query).toContain('WHERE EXISTS');
       expect(params[2]).toBe(1); // req.user.id
     });
+
+    it('should return 409 if recipe already in list', async () => {
+      const error = new Error('Duplicate entry');
+      error.code = '23505';
+      pool.query.mockRejectedValue(error);
+
+      const res = await request(app).post('/lists/1/recipes').send({ recipe_id: 10 });
+      expect(res.statusCode).toEqual(409);
+      expect(res.body).toEqual({ error: 'Recipe already in list' });
+    });
   });
 
   describe('DELETE /lists/:id/recipes/:recipeId', () => {

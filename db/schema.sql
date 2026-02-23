@@ -1,4 +1,5 @@
 -- Drop tables in reverse order of dependency to avoid foreign key constraints
+DROP FUNCTION IF EXISTS update_list_timestamp CASCADE;
 DROP TABLE IF EXISTS list_recipes CASCADE;
 DROP TABLE IF EXISTS lists CASCADE;
 DROP TABLE IF EXISTS recipe_likes CASCADE;
@@ -72,7 +73,8 @@ CREATE TABLE lists (
     id BIGSERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- List_Recipes
@@ -88,3 +90,17 @@ CREATE INDEX idx_recipes_title ON recipes(title);
 CREATE INDEX idx_recipe_ingredients_ing_id ON recipe_ingredients(ingredient_id);
 CREATE INDEX idx_recipe_tags_tag_id ON recipe_tags(tag_id);
 CREATE INDEX idx_recipe_likes_recipe_id ON recipe_likes(recipe_id);
+
+-- Functions & Triggers
+CREATE OR REPLACE FUNCTION update_list_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE lists SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.list_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_list_updated_at
+AFTER INSERT ON list_recipes
+FOR EACH ROW
+EXECUTE FUNCTION update_list_timestamp();

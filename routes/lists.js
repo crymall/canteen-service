@@ -8,7 +8,28 @@ router.get('/', authenticateToken, authorizePermissions(['read:canteen', 'read:p
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query('SELECT * FROM lists LIMIT $1 OFFSET $2', [limit, offset]);
+    const { name, sort, order } = req.query;
+
+    let query = 'SELECT * FROM lists';
+    const params = [];
+    let paramCount = 1;
+
+    if (name) {
+      query += ` WHERE name ILIKE $${paramCount}`;
+      params.push(`%${name}%`);
+      paramCount++;
+    }
+
+    const validSorts = ['created_at', 'updated_at'];
+    const sortBy = validSorts.includes(sort) ? sort : 'created_at';
+    const validOrders = ['ASC', 'DESC'];
+    const sortOrder = validOrders.includes((order || '').toUpperCase()) ? (order || '').toUpperCase() : 'DESC';
+
+    query += ` ORDER BY ${sortBy} ${sortOrder}`;
+    query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -21,7 +42,28 @@ router.get('/user/:userId', authenticateToken, authorizePermissions(['read:cante
     const { userId } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query('SELECT * FROM lists WHERE user_id = $1 LIMIT $2 OFFSET $3', [userId, limit, offset]);
+    const { name, sort, order } = req.query;
+
+    let query = 'SELECT * FROM lists WHERE user_id = $1';
+    const params = [userId];
+    let paramCount = 2;
+
+    if (name) {
+      query += ` AND name ILIKE $${paramCount}`;
+      params.push(`%${name}%`);
+      paramCount++;
+    }
+
+    const validSorts = ['created_at', 'updated_at'];
+    const sortBy = validSorts.includes(sort) ? sort : 'created_at';
+    const validOrders = ['ASC', 'DESC'];
+    const sortOrder = validOrders.includes((order || '').toUpperCase()) ? (order || '').toUpperCase() : 'DESC';
+
+    query += ` ORDER BY ${sortBy} ${sortOrder}`;
+    query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -103,6 +145,9 @@ router.post('/:id/recipes', authenticateToken, authorizePermissions(['write:cant
     }
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Recipe already in list' });
+    }
     next(err);
   }
 });
