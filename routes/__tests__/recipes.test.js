@@ -82,6 +82,20 @@ describe('Recipes Routes', () => {
     });
   });
 
+  describe('GET /recipes/user/:userId', () => {
+    it('should return recipes for a specific user', async () => {
+      const mockRecipes = [{ id: 1, title: 'Pancakes', author: { id: 1, username: 'chef_john' } }];
+      pool.query.mockResolvedValue({ rows: mockRecipes });
+
+      const res = await request(app).get('/recipes/user/1');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockRecipes);
+      const [query, params] = pool.query.mock.calls[0];
+      expect(query).toContain('WHERE r.author_id = $1');
+      expect(params[0]).toBe('1');
+    });
+  });
+
   describe('PUT /recipes/:id', () => {
     it('should update a recipe if owned by user', async () => {
       pool.query.mockResolvedValue({ rows: [{ id: 1, title: 'Updated' }] });

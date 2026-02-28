@@ -169,6 +169,63 @@ router.get(
   },
 );
 
+/* GET recipes by user. */
+router.get(
+  "/user/:userId",
+  authenticateToken,
+  authorizePermissions(["read:canteen", "read:public"]),
+  async function (req, res, next) {
+    try {
+      const { userId } = req.params;
+      const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+      const offset = parseInt(req.query.offset) || 0;
+
+      const query = `
+      SELECT
+        r.*,
+        json_build_object('id', u.id, 'username', u.username) AS author,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'id', i.id,
+            'name', i.name,
+            'quantity', ri.quantity,
+            'unit', ri.unit,
+            'notes', ri.notes
+          )), '[]')
+          FROM recipe_ingredients ri
+          JOIN ingredients i ON ri.ingredient_id = i.id
+          WHERE ri.recipe_id = r.id
+        ) AS ingredients,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'id', t.id,
+            'name', t.name
+          )), '[]')
+          FROM recipe_tags rt
+          JOIN tags t ON rt.tag_id = t.id
+          WHERE rt.recipe_id = r.id
+        ) AS tags,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'user_id', rl.user_id,
+            'created_at', rl.created_at
+          )), '[]')
+          FROM recipe_likes rl
+          WHERE rl.recipe_id = r.id
+        ) AS likes
+      FROM recipes r
+      JOIN users u ON r.author_id = u.id
+      WHERE r.author_id = $1
+      LIMIT $2 OFFSET $3
+    `;
+      const result = await pool.query(query, [userId, limit, offset]);
+      res.json(result.rows);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /* GET single recipe. */
 router.get(
   "/:id",
@@ -310,7 +367,6 @@ router.post(
 
       if (ingredients && Array.isArray(ingredients)) {
         for (const ing of ingredients) {
-          console.log("INGREDIENT", ing)
           await client.query(
             "INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES ($1, $2, $3, $4, $5)",
             [recipe.id, ing.id, ing.quantity, ing.unit, ing.notes],
