@@ -296,16 +296,22 @@ router.put(
         instructions,
         prep_time_minutes,
         cook_time_minutes,
+        wait_time_minutes,
         servings,
       } = req.body;
+
+      const total_time_minutes = (parseInt(prep_time_minutes) || 0) + (parseInt(cook_time_minutes) || 0) + (parseInt(wait_time_minutes) || 0);
+
       const result = await pool.query(
-        "UPDATE recipes SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4, cook_time_minutes = $5, servings = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 AND author_id = $8 RETURNING *",
+        "UPDATE recipes SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4, cook_time_minutes = $5, wait_time_minutes = $6, total_time_minutes = $7, servings = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 AND author_id = $10 RETURNING *",
         [
           title,
           description,
           instructions,
           prep_time_minutes,
           cook_time_minutes,
+          wait_time_minutes,
+          total_time_minutes,
           servings,
           id,
           req.user.id,
@@ -338,12 +344,16 @@ router.post(
         instructions,
         prep_time_minutes,
         cook_time_minutes,
+        wait_time_minutes,
         servings,
         tags,
         ingredients,
       } = req.body;
+
+      const total_time_minutes = (parseInt(prep_time_minutes) || 0) + (parseInt(cook_time_minutes) || 0) + (parseInt(wait_time_minutes) || 0);
+
       const result = await client.query(
-        "INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, servings) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+        "INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, wait_time_minutes, total_time_minutes, servings) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
         [
           req.user.id,
           title,
@@ -351,6 +361,8 @@ router.post(
           instructions,
           prep_time_minutes,
           cook_time_minutes,
+          wait_time_minutes,
+          total_time_minutes,
           servings,
         ],
       );

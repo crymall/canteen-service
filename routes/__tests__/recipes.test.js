@@ -99,11 +99,17 @@ describe('Recipes Routes', () => {
   describe('PUT /recipes/:id', () => {
     it('should update a recipe if owned by user', async () => {
       pool.query.mockResolvedValue({ rows: [{ id: 1, title: 'Updated' }] });
-      const res = await request(app).put('/recipes/1').send({ title: 'Updated' });
+      const res = await request(app).put('/recipes/1').send({ 
+        title: 'Updated',
+        prep_time_minutes: 10,
+        cook_time_minutes: 20,
+        wait_time_minutes: 30
+      });
       expect(res.statusCode).toEqual(200);
       const [query, params] = pool.query.mock.calls[0];
-      expect(query).toContain('author_id = $8');
-      expect(params[7]).toBe(1); // req.user.id
+      expect(query).toContain('author_id = $10');
+      expect(params[6]).toBe(60); // total_time_minutes
+      expect(params[9]).toBe(1); // req.user.id
     });
   });
 
@@ -117,6 +123,8 @@ describe('Recipes Routes', () => {
         instructions: 'Whisk and fry',
         prep_time_minutes: 5,
         cook_time_minutes: 5,
+        wait_time_minutes: 5,
+        total_time_minutes: 15,
         servings: 1
       };
       
@@ -139,6 +147,7 @@ describe('Recipes Routes', () => {
       expect(clientCalls[0][0]).toBe('BEGIN');
       expect(clientCalls[1][0]).toContain('INSERT INTO recipes');
       expect(clientCalls[1][1][0]).toBe(1); // req.user.id
+      expect(clientCalls[1][1][7]).toBe(15); // total_time_minutes
       expect(clientCalls[2][0]).toContain('INSERT INTO recipe_tags');
       expect(clientCalls[3][0]).toContain('INSERT INTO recipe_ingredients');
       expect(clientCalls[4][0]).toBe('COMMIT');

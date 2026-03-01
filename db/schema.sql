@@ -26,6 +26,8 @@ CREATE TABLE recipes (
     instructions TEXT NOT NULL,
     prep_time_minutes INT,
     cook_time_minutes INT,
+    wait_time_minutes INT,
+    total_time_minutes INT,
     servings INT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
