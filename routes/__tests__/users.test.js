@@ -19,7 +19,7 @@ describe('Users Routes', () => {
 
   describe('GET /users', () => {
     it('should return a list of users', async () => {
-      const mockUsers = [{ id: 1, username: 'chef_john' }];
+      const mockUsers = [{ id: 1, iam_id: 'iam_001' }];
       pool.query.mockResolvedValue({ rows: mockUsers });
 
       const res = await request(app).get('/users');
@@ -30,7 +30,7 @@ describe('Users Routes', () => {
 
   describe('GET /users/:id', () => {
     it('should return a user if found', async () => {
-      const mockUser = { id: 1, username: 'chef_john' };
+      const mockUser = { id: 1, iam_id: 'iam_001' };
       pool.query.mockResolvedValue({ rows: [mockUser] });
 
       const res = await request(app).get('/users/1');
@@ -49,10 +49,10 @@ describe('Users Routes', () => {
 
   describe('POST /users', () => {
     it('should create a new user', async () => {
-      const newUser = { id: 2, username: 'chef_mary', iam_id: 'iam_123' };
+      const newUser = { id: 2, iam_id: 'iam_123' };
       pool.query.mockResolvedValue({ rows: [newUser] });
 
-      const res = await request(app).post('/users').send({ username: 'chef_mary', iam_id: 'iam_123' });
+      const res = await request(app).post('/users').send({ iam_id: 'iam_123' });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newUser);
     });

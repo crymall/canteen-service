@@ -1,26 +1,33 @@
-var express = require('express');
+var express = require("express");
 var router = express.Router();
-var pool = require('../config/db');
-var { authenticateToken, authorizePermissions, authenticateApiKey } = require('../middleware/authorize');
+var pool = require("../config/db");
+var {
+  authenticateToken,
+  authorizePermissions,
+  authenticateApiKey,
+} = require("../middleware/authorize");
 
 /* GET users listing. */
-router.get('/', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
+router.get("/", async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query('SELECT * FROM users LIMIT $1 OFFSET $2', [limit, offset]);
+    const result = await pool.query("SELECT * FROM users LIMIT $1 OFFSET $2", [
+      limit,
+      offset,
+    ]);
     res.json(result.rows);
   } catch (err) {
     next(err);
   }
 });
 
-router.get('/:id', authenticateToken, authorizePermissions(['read:canteen', 'read:public']), async function(req, res, next) {
+router.get("/:id", async function (req, res, next) {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    const result = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
     res.json(result.rows[0]);
   } catch (err) {
@@ -29,10 +36,13 @@ router.get('/:id', authenticateToken, authorizePermissions(['read:canteen', 'rea
 });
 
 /* POST new user. */
-router.post('/', authenticateApiKey, async function(req, res, next) {
+router.post("/", authenticateApiKey, async function (req, res, next) {
   try {
-    const { username, iam_id } = req.body;
-    const result = await pool.query('INSERT INTO users (username, iam_id) VALUES ($1, $2) RETURNING *', [username, iam_id]);
+    const { iam_id } = req.body;
+    const result = await pool.query(
+      "INSERT INTO users (iam_id) VALUES ($1) RETURNING *",
+      [iam_id],
+    );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     next(err);

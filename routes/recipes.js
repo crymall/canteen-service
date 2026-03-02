@@ -7,65 +7,61 @@ var {
 } = require("../middleware/authorize");
 
 /* GET recipes listing. */
-router.get(
-  "/",
-  authenticateToken,
-  authorizePermissions(["read:canteen", "read:public"]),
-  async function (req, res, next) {
-    try {
-      const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-      const offset = parseInt(req.query.offset) || 0;
+router.get("/", async function (req, res, next) {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    const offset = parseInt(req.query.offset) || 0;
 
-      const parseIds = (input) => {
-        if (!input) return [];
-        if (Array.isArray(input)) return input.map(Number);
-        return input.split(",").map(Number);
-      };
+    const parseIds = (input) => {
+      if (!input) return [];
+      if (Array.isArray(input)) return input.map(Number);
+      return input.split(",").map(Number);
+    };
 
-      const tags = parseIds(req.query.tags);
-      const ingredients = parseIds(req.query.ingredients);
-      const { title } = req.query;
+    const tags = parseIds(req.query.tags);
+    const ingredients = parseIds(req.query.ingredients);
+    const { title } = req.query;
 
-      let whereClause = "";
-      let params = [];
-      let paramCount = 1;
+    let whereClause = "";
+    let params = [];
+    let paramCount = 1;
 
-      if (title) {
-        whereClause += ` AND r.title ILIKE $${paramCount}`;
-        params.push(`%${title}%`);
-        paramCount++;
-      }
+    if (title) {
+      whereClause += ` AND r.title ILIKE $${paramCount}`;
+      params.push(`%${title}%`);
+      paramCount++;
+    }
 
-      if (tags && Array.isArray(tags) && tags.length > 0) {
-        whereClause += ` AND r.id IN (
+    if (tags && Array.isArray(tags) && tags.length > 0) {
+      whereClause += ` AND r.id IN (
         SELECT recipe_id 
         FROM recipe_tags 
         WHERE tag_id = ANY($${paramCount}::int[]) 
         GROUP BY recipe_id 
         HAVING COUNT(DISTINCT tag_id) = array_length($${paramCount}::int[], 1)
       )`;
-        params.push(tags);
-        paramCount++;
-      }
+      params.push(tags);
+      paramCount++;
+    }
 
-      if (ingredients && Array.isArray(ingredients) && ingredients.length > 0) {
-        whereClause += ` AND r.id IN (
+    if (ingredients && Array.isArray(ingredients) && ingredients.length > 0) {
+      whereClause += ` AND r.id IN (
         SELECT recipe_id 
         FROM recipe_ingredients 
         WHERE ingredient_id = ANY($${paramCount}::int[]) 
         GROUP BY recipe_id 
         HAVING COUNT(DISTINCT ingredient_id) = array_length($${paramCount}::int[], 1)
       )`;
-        params.push(ingredients);
-        paramCount++;
-      }
+      params.push(ingredients);
+      paramCount++;
+    }
 
-      params.push(limit);
-      const limitParam = paramCount++;
-      params.push(offset);
-      const offsetParam = paramCount++;
+    params.push(limit);
+    const limitParam = paramCount++;
+    params.push(offset);
+    const offsetParam = paramCount++;
 
-      const query = `
+    const query = `
       SELECT
         r.*,
         json_build_object('id', u.id, 'username', u.username) AS author,
@@ -103,24 +99,19 @@ router.get(
       WHERE 1=1 ${whereClause}
       LIMIT $${limitParam} OFFSET $${offsetParam}
     `;
-      const result = await pool.query(query, params);
-      res.json(result.rows);
-    } catch (err) {
-      next(err);
-    }
-  },
-);
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* GET recipes sorted by likes. */
-router.get(
-  "/popular",
-  authenticateToken,
-  authorizePermissions(["read:canteen", "read:public"]),
-  async function (req, res, next) {
-    try {
-      const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-      const offset = parseInt(req.query.offset) || 0;
-      const query = `
+router.get("/popular", async function (req, res, next) {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    const offset = parseInt(req.query.offset) || 0;
+    const query = `
       SELECT
         r.*,
         json_build_object('id', u.id, 'username', u.username) AS author,
@@ -161,26 +152,21 @@ router.get(
       ORDER BY like_count DESC
       LIMIT $1 OFFSET $2
     `;
-      const result = await pool.query(query, [limit, offset]);
-      res.json(result.rows);
-    } catch (err) {
-      next(err);
-    }
-  },
-);
+    const result = await pool.query(query, [limit, offset]);
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* GET recipes by user. */
-router.get(
-  "/user/:userId",
-  authenticateToken,
-  authorizePermissions(["read:canteen", "read:public"]),
-  async function (req, res, next) {
-    try {
-      const { userId } = req.params;
-      const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-      const offset = parseInt(req.query.offset) || 0;
+router.get("/user/:userId", async function (req, res, next) {
+  try {
+    const { userId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    const offset = parseInt(req.query.offset) || 0;
 
-      const query = `
+    const query = `
       SELECT
         r.*,
         json_build_object('id', u.id, 'username', u.username) AS author,
@@ -218,23 +204,18 @@ router.get(
       WHERE r.author_id = $1
       LIMIT $2 OFFSET $3
     `;
-      const result = await pool.query(query, [userId, limit, offset]);
-      res.json(result.rows);
-    } catch (err) {
-      next(err);
-    }
-  },
-);
+    const result = await pool.query(query, [userId, limit, offset]);
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* GET single recipe. */
-router.get(
-  "/:id",
-  authenticateToken,
-  authorizePermissions(["read:canteen", "read:public"]),
-  async function (req, res, next) {
-    try {
-      const { id } = req.params;
-      const query = `
+router.get("/:id", async function (req, res, next) {
+  try {
+    const { id } = req.params;
+    const query = `
       SELECT
         r.*,
         json_build_object('id', u.id, 'username', u.username) AS author,
@@ -271,22 +252,21 @@ router.get(
       JOIN users u ON r.author_id = u.id
       WHERE r.id = $1
     `;
-      const result = await pool.query(query, [id]);
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Recipe not found" });
-      }
-      res.json(result.rows[0]);
-    } catch (err) {
-      next(err);
+    const result = await pool.query(query, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Recipe not found" });
     }
-  },
-);
+    res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* PUT update recipe. */
 router.put(
   "/:id",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id } = req.params;
@@ -300,7 +280,10 @@ router.put(
         servings,
       } = req.body;
 
-      const total_time_minutes = (parseInt(prep_time_minutes) || 0) + (parseInt(cook_time_minutes) || 0) + (parseInt(wait_time_minutes) || 0);
+      const total_time_minutes =
+        (parseInt(prep_time_minutes) || 0) +
+        (parseInt(cook_time_minutes) || 0) +
+        (parseInt(wait_time_minutes) || 0);
 
       const result = await pool.query(
         "UPDATE recipes SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4, cook_time_minutes = $5, wait_time_minutes = $6, total_time_minutes = $7, servings = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 AND author_id = $10 RETURNING *",
@@ -333,7 +316,7 @@ router.put(
 router.post(
   "/",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     const client = await pool.connect();
     try {
@@ -350,7 +333,10 @@ router.post(
         ingredients,
       } = req.body;
 
-      const total_time_minutes = (parseInt(prep_time_minutes) || 0) + (parseInt(cook_time_minutes) || 0) + (parseInt(wait_time_minutes) || 0);
+      const total_time_minutes =
+        (parseInt(prep_time_minutes) || 0) +
+        (parseInt(cook_time_minutes) || 0) +
+        (parseInt(wait_time_minutes) || 0);
 
       const result = await client.query(
         "INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, wait_time_minutes, total_time_minutes, servings) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
@@ -401,7 +387,7 @@ router.post(
 router.post(
   "/:id/ingredients",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id } = req.params;
@@ -429,7 +415,7 @@ router.post(
 router.post(
   "/:id/tags",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id } = req.params;
@@ -457,7 +443,7 @@ router.post(
 router.post(
   "/:id/likes",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id } = req.params;
@@ -476,7 +462,7 @@ router.post(
 router.delete(
   "/:id/likes",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id } = req.params;
@@ -498,7 +484,7 @@ router.delete(
 router.delete(
   "/:id/tags/:tagId",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id, tagId } = req.params;
@@ -522,7 +508,7 @@ router.delete(
 router.delete(
   "/:id/ingredients/:ingredientId",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { id, ingredientId } = req.params;

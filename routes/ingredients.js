@@ -9,8 +9,6 @@ var {
 /* GET ingredients listing. */
 router.get(
   "/",
-  authenticateToken,
-  authorizePermissions(["read:canteen", "read:public"]),
   async function (req, res, next) {
     try {
       const limit = Math.min(parseInt(req.query.limit) || 50, 50);
@@ -42,7 +40,7 @@ router.get(
 router.post(
   "/",
   authenticateToken,
-  authorizePermissions(["write:canteen"]),
+  authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
       const { name } = req.body;
