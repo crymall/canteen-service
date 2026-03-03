@@ -84,3 +84,10 @@ INSERT INTO list_recipes (list_id, recipe_id) VALUES
 -- Add a Like (Chef Mario likes Home Cook's Pancakes)
 INSERT INTO recipe_likes (user_id, recipe_id) VALUES 
 (2, 1);
+
+-- Add Mutual Follows (Friends)
+INSERT INTO follows (follower_id, following_id) VALUES (1, 2), (2, 1);
+
+-- Add Message from 'test' to 'crymall'
+INSERT INTO messages (sender_id, receiver_id, content) VALUES 
+(2, 1, 'Hey crymall, check out this recipe!');

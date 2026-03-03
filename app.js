@@ -11,6 +11,10 @@ var ingredientsRouter = require("./routes/ingredients");
 var tagsRouter = require("./routes/tags");
 var listsRouter = require("./routes/lists");
 var usersRouter = require("./routes/users");
+var messagesRouter = require("./routes/messages");
+var relationshipsRouter = require("./routes/relationships");
+var notificationsRouter = require("./routes/notifications");
+
 
 var limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -40,5 +44,8 @@ app.use("/ingredients", ingredientsRouter);
 app.use("/tags", tagsRouter);
 app.use("/lists", listsRouter);
 app.use("/users", usersRouter);
+app.use("/messages", messagesRouter);
+app.use("/relationships", relationshipsRouter);
+app.use("/notifications", notificationsRouter);
 
 module.exports = app;

@@ -1,7 +1,9 @@
 -- Drop tables in reverse order of dependency to avoid foreign key constraints
 DROP FUNCTION IF EXISTS update_list_timestamp CASCADE;
+DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS list_recipes CASCADE;
 DROP TABLE IF EXISTS lists CASCADE;
+DROP TABLE IF EXISTS follows CASCADE;
 DROP TABLE IF EXISTS recipe_likes CASCADE;
 DROP TABLE IF EXISTS recipe_tags CASCADE;
 DROP TABLE IF EXISTS tags CASCADE;
@@ -15,6 +17,15 @@ CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     iam_id VARCHAR(255) UNIQUE NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL
+);
+
+-- Follows
+CREATE TABLE follows (
+    follower_id INT REFERENCES users(id) ON DELETE CASCADE,
+    following_id INT REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (follower_id, following_id),
+    CHECK (follower_id != following_id)
 );
 
 -- Recipes
@@ -87,11 +98,24 @@ CREATE TABLE list_recipes (
     PRIMARY KEY (list_id, recipe_id)
 );
 
+-- Messages
+CREATE TABLE messages (
+    id BIGSERIAL PRIMARY KEY,
+    sender_id INT REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id INT REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT,
+    recipe_id BIGINT REFERENCES recipes(id) ON DELETE SET NULL,
+    list_id BIGINT REFERENCES lists(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX idx_recipes_title ON recipes(title);
 CREATE INDEX idx_recipe_ingredients_ing_id ON recipe_ingredients(ingredient_id);
 CREATE INDEX idx_recipe_tags_tag_id ON recipe_tags(tag_id);
 CREATE INDEX idx_recipe_likes_recipe_id ON recipe_likes(recipe_id);
+CREATE INDEX idx_follows_following_id ON follows(following_id);
+CREATE INDEX idx_messages_receiver_id ON messages(receiver_id);
 
 -- Functions & Triggers
 CREATE OR REPLACE FUNCTION update_list_timestamp()

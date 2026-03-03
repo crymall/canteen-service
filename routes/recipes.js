@@ -6,8 +6,15 @@ var {
   authorizePermissions,
 } = require("../middleware/authorize");
 
+const optionalAuth = (req, res, next) => {
+  if (req.headers.authorization) {
+    return authenticateToken(req, res, next);
+  }
+  next();
+};
+
 /* GET recipes listing. */
-router.get("/", async function (req, res, next) {
+router.get("/", optionalAuth, async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -20,7 +27,7 @@ router.get("/", async function (req, res, next) {
 
     const tags = parseIds(req.query.tags);
     const ingredients = parseIds(req.query.ingredients);
-    const { title } = req.query;
+    const { title, feed } = req.query;
 
     let whereClause = "";
     let params = [];
@@ -54,6 +61,28 @@ router.get("/", async function (req, res, next) {
       )`;
       params.push(ingredients);
       paramCount++;
+    }
+
+    if (feed) {
+      if (!req.user) {
+        return res.status(401).json({ error: "Authentication required for feed" });
+      }
+      if (feed === "following") {
+        whereClause += ` AND r.author_id IN (
+          SELECT following_id FROM follows WHERE follower_id = $${paramCount}
+        )`;
+        params.push(req.user.id);
+        paramCount++;
+      } else if (feed === "friends") {
+        whereClause += ` AND r.author_id IN (
+          SELECT f1.following_id 
+          FROM follows f1 
+          JOIN follows f2 ON f1.following_id = f2.follower_id 
+          WHERE f1.follower_id = $${paramCount} AND f2.following_id = $${paramCount}
+        )`;
+        params.push(req.user.id);
+        paramCount++;
+      }
     }
 
     params.push(limit);
