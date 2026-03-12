@@ -106,6 +106,7 @@ CREATE TABLE messages (
     content TEXT,
     recipe_id BIGINT REFERENCES recipes(id) ON DELETE SET NULL,
     list_id BIGINT REFERENCES lists(id) ON DELETE SET NULL,
+    is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

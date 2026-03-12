@@ -13,7 +13,6 @@ var listsRouter = require("./routes/lists");
 var usersRouter = require("./routes/users");
 var messagesRouter = require("./routes/messages");
 var relationshipsRouter = require("./routes/relationships");
-var notificationsRouter = require("./routes/notifications");
 
 
 var limiter = rateLimit({
@@ -46,6 +45,5 @@ app.use("/lists", listsRouter);
 app.use("/users", usersRouter);
 app.use("/messages", messagesRouter);
 app.use("/relationships", relationshipsRouter);
-app.use("/notifications", notificationsRouter);
 
 module.exports = app;
