@@ -30,6 +30,28 @@ router.post("/", authenticateToken, async function (req, res, next) {
   }
 });
 
+/* PUT mark messages as read/unread. */
+router.put("/read", authenticateToken, async function (req, res, next) {
+  try {
+    const { message_ids, is_read } = req.body;
+
+    if (!Array.isArray(message_ids) || message_ids.length === 0) {
+      return res.status(400).json({ error: "message_ids must be a non-empty array" });
+    }
+
+    // Default to true if not provided, otherwise use boolean value
+    const status = is_read === undefined ? true : !!is_read;
+
+    const result = await pool.query(
+      "UPDATE messages SET is_read = $1 WHERE id = ANY($2::bigint[]) AND receiver_id = $3 RETURNING *",
+      [status, message_ids, req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* GET conversation threads (Inbox). */
 router.get("/threads", authenticateToken, async function (req, res, next) {
   try {

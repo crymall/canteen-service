@@ -50,6 +50,33 @@ describe("Messages Routes", () => {
     });
   });
 
+  describe("PUT /messages/read", () => {
+    it("should mark messages as read", async () => {
+      const mockUpdatedMessages = [{ id: 1, is_read: true }];
+      pool.query.mockResolvedValue({ rows: mockUpdatedMessages });
+
+      const res = await request(app)
+        .put("/messages/read")
+        .send({ message_ids: [1], is_read: true });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockUpdatedMessages);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE messages"),
+        [true, [1], 1]
+      );
+    });
+
+    it("should return 400 if message_ids is invalid", async () => {
+      const res = await request(app)
+        .put("/messages/read")
+        .send({ message_ids: "invalid" });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.error).toBe("message_ids must be a non-empty array");
+    });
+  });
+
   describe("GET /messages/threads", () => {
     it("should return conversation threads", async () => {
       const mockThreads = [{ id: 1, content: "last msg", other_username: "user2" }];
