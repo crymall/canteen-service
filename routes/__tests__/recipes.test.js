@@ -47,6 +47,15 @@ describe('Recipes Routes', () => {
       expect(query).toContain('recipe_tags');
       expect(params[0]).toBe('%Soup%');
     });
+
+    it('should filter recipes by multiple IDs', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      await request(app).get('/recipes?ids=1,2,3');
+      
+      const [query, params] = pool.query.mock.calls[0];
+      expect(query).toContain('r.id = ANY');
+      expect(params[0]).toEqual([1, 2, 3]);
+    });
   });
 
   describe('GET /recipes/:id', () => {

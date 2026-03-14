@@ -25,6 +25,7 @@ router.get("/", optionalAuth, async function (req, res, next) {
       return input.split(",").map(Number);
     };
 
+    const ids = parseIds(req.query.ids);
     const tags = parseIds(req.query.tags);
     const ingredients = parseIds(req.query.ingredients);
     const { title, feed } = req.query;
@@ -36,6 +37,12 @@ router.get("/", optionalAuth, async function (req, res, next) {
     if (title) {
       whereClause += ` AND r.title ILIKE $${paramCount}`;
       params.push(`%${title}%`);
+      paramCount++;
+    }
+
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      whereClause += ` AND r.id = ANY($${paramCount}::bigint[])`;
+      params.push(ids);
       paramCount++;
     }
 
