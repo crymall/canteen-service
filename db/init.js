@@ -3,7 +3,7 @@ const pool = require('../config/db');
 
 const runMigrations = async () => {
   try {
-    const migrate = (await import('node-pg-migrate')).default;
+    const { runner: migrate } = await import('node-pg-migrate');
 
     let retries = 5;
     while (retries) {
