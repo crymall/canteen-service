@@ -1,9 +1,10 @@
 const path = require('path');
 const pool = require('../config/db');
-const migrate = require('node-pg-migrate').default;
 
 const runMigrations = async () => {
   try {
+    const migrate = (await import('node-pg-migrate')).default;
+
     let retries = 5;
     while (retries) {
       try {
