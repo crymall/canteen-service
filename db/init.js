@@ -1,12 +1,6 @@
-const fs = require('fs');
 const path = require('path');
 const pool = require('../config/db');
-
-const schemaPath = path.join(__dirname, 'schema.sql');
-const seedsPath = path.join(__dirname, 'seeds.sql');
-
-const schemaSql = fs.readFileSync(schemaPath, { encoding: 'utf8' });
-const seedsSql = fs.readFileSync(seedsPath, { encoding: 'utf8' });
+const migrate = require('node-pg-migrate').default;
 
 const runMigrations = async () => {
   try {
@@ -27,14 +21,21 @@ const runMigrations = async () => {
     }
 
     console.log('Starting database initialization...');
-
-    console.log('Building tables...');
-    await pool.query(schemaSql);
-    console.log('Tables created.');
-
-    console.log('Seeding data...');
-    await pool.query(seedsSql);
-    console.log('Data seeded.');
+    console.log('Starting database migrations...');
+    
+    await migrate({
+      databaseUrl: {
+        host: process.env.DB_HOST,
+        port: 5432,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+      },
+      dir: path.join(__dirname, 'migrations'),
+      direction: 'up',
+      migrationsTable: 'pgmigrations',
+      log: (msg) => console.log(msg),
+    });
 
     console.log('Database initialized successfully.');
   } catch (err) {
