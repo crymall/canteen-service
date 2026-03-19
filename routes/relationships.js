@@ -38,12 +38,29 @@ router.delete("/:id", authenticateToken, async function (req, res, next) {
   }
 });
 
+/* GET relationship counts. */
+router.get("/:id/counts", authenticateToken, async function (req, res, next) {
+  try {
+    const result = await pool.query(
+      `SELECT 
+        (SELECT COUNT(*)::int FROM follows WHERE following_id = $1) as followers,
+        (SELECT COUNT(*)::int FROM follows WHERE follower_id = $1) as following`,
+      [req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* GET followers. */
 router.get("/:id/followers", authenticateToken, async function (req, res, next) {
   try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    const offset = parseInt(req.query.offset) || 0;
     const result = await pool.query(
-      "SELECT u.id, u.username FROM follows f JOIN users u ON f.follower_id = u.id WHERE f.following_id = $1",
-      [req.params.id]
+      "SELECT u.id, u.username FROM follows f JOIN users u ON f.follower_id = u.id WHERE f.following_id = $1 LIMIT $2 OFFSET $3",
+      [req.params.id, limit, offset]
     );
     res.json(result.rows);
   } catch (err) {
@@ -54,9 +71,11 @@ router.get("/:id/followers", authenticateToken, async function (req, res, next) 
 /* GET following. */
 router.get("/:id/following", authenticateToken, async function (req, res, next) {
   try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    const offset = parseInt(req.query.offset) || 0;
     const result = await pool.query(
-      "SELECT u.id, u.username FROM follows f JOIN users u ON f.following_id = u.id WHERE f.follower_id = $1",
-      [req.params.id]
+      "SELECT u.id, u.username FROM follows f JOIN users u ON f.following_id = u.id WHERE f.follower_id = $1 LIMIT $2 OFFSET $3",
+      [req.params.id, limit, offset]
     );
     res.json(result.rows);
   } catch (err) {
@@ -67,9 +86,11 @@ router.get("/:id/following", authenticateToken, async function (req, res, next) 
 /* GET friends (mutual follows). */
 router.get("/:id/friends", authenticateToken, async function (req, res, next) {
   try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    const offset = parseInt(req.query.offset) || 0;
     const result = await pool.query(
-      "SELECT u.id, u.username FROM users u JOIN follows f1 ON u.id = f1.following_id JOIN follows f2 ON u.id = f2.follower_id WHERE f1.follower_id = $1 AND f2.following_id = $1",
-      [req.params.id]
+      "SELECT u.id, u.username FROM users u JOIN follows f1 ON u.id = f1.following_id JOIN follows f2 ON u.id = f2.follower_id WHERE f1.follower_id = $1 AND f2.following_id = $1 LIMIT $2 OFFSET $3",
+      [req.params.id, limit, offset]
     );
     res.json(result.rows);
   } catch (err) {

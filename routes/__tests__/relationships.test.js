@@ -56,6 +56,21 @@ describe("Relationships Routes", () => {
     });
   });
 
+  describe("GET /relationships/:id/counts", () => {
+    it("should return follower and following counts", async () => {
+      const mockCounts = { followers: 10, following: 5 };
+      pool.query.mockResolvedValue({ rows: [mockCounts] });
+
+      const res = await request(app).get("/relationships/2/counts");
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockCounts);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT COUNT(*)"),
+        ["2"]
+      );
+    });
+  });
+
   describe("GET /relationships/:id/followers", () => {
     it("should return followers list", async () => {
       const mockFollowers = [{ id: 3, username: "user3" }];
@@ -66,7 +81,7 @@ describe("Relationships Routes", () => {
       expect(res.body).toEqual(mockFollowers);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("SELECT u.id, u.username FROM follows"),
-        ["2"]
+        ["2", 50, 0]
       );
     });
   });
@@ -79,6 +94,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/following");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFollowing);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT u.id, u.username FROM follows"),
+        ["2", 50, 0]
+      );
     });
   });
 
@@ -90,6 +109,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/friends");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFriends);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT u.id, u.username FROM users"),
+        ["2", 50, 0]
+      );
     });
   });
 });
