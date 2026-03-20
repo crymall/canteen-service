@@ -340,6 +340,11 @@ router.put(
         servings,
       } = req.body;
 
+      const parsedPrepTime = prep_time_minutes === "" ? null : prep_time_minutes;
+      const parsedCookTime = cook_time_minutes === "" ? null : cook_time_minutes;
+      const parsedWaitTime = wait_time_minutes === "" ? null : wait_time_minutes;
+      const parsedServings = servings === "" ? null : servings;
+
       const total_time_minutes =
         (parseInt(prep_time_minutes) || 0) +
         (parseInt(cook_time_minutes) || 0) +
@@ -351,11 +356,11 @@ router.put(
           title,
           description,
           instructions,
-          prep_time_minutes,
-          cook_time_minutes,
-          wait_time_minutes,
+          parsedPrepTime,
+          parsedCookTime,
+          parsedWaitTime,
           total_time_minutes,
-          servings,
+          parsedServings,
           id,
           req.user.id,
         ],
@@ -393,6 +398,11 @@ router.post(
         ingredients,
       } = req.body;
 
+      const parsedPrepTime = prep_time_minutes === "" ? null : prep_time_minutes;
+      const parsedCookTime = cook_time_minutes === "" ? null : cook_time_minutes;
+      const parsedWaitTime = wait_time_minutes === "" ? null : wait_time_minutes;
+      const parsedServings = servings === "" ? null : servings;
+
       const total_time_minutes =
         (parseInt(prep_time_minutes) || 0) +
         (parseInt(cook_time_minutes) || 0) +
@@ -405,11 +415,11 @@ router.post(
           title,
           description,
           instructions,
-          prep_time_minutes,
-          cook_time_minutes,
-          wait_time_minutes,
+          parsedPrepTime,
+          parsedCookTime,
+          parsedWaitTime,
           total_time_minutes,
-          servings,
+          parsedServings,
         ],
       );
       const recipe = result.rows[0];
@@ -427,7 +437,13 @@ router.post(
         for (const ing of ingredients) {
           await client.query(
             "INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES ($1, $2, $3, $4, $5)",
-            [recipe.id, ing.id, ing.quantity, ing.unit, ing.notes],
+            [
+              recipe.id,
+              ing.id,
+              ing.quantity === "" ? null : ing.quantity,
+              ing.unit,
+              ing.notes,
+            ],
           );
         }
       }
@@ -476,12 +492,13 @@ router.post(
     try {
       const { id } = req.params;
       const { ingredient_id, quantity, unit, notes } = req.body;
+      const parsedQuantity = quantity === "" ? null : quantity;
       const result = await pool.query(
         `INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes)
        SELECT $1, $2, $3, $4, $5
        WHERE EXISTS (SELECT 1 FROM recipes WHERE id = $1 AND author_id = $6)
        RETURNING *`,
-        [id, ingredient_id, quantity, unit, notes, req.user.id],
+        [id, ingredient_id, parsedQuantity, unit, notes, req.user.id],
       );
       if (result.rows.length === 0) {
         return res
