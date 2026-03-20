@@ -49,10 +49,10 @@ describe('Users Routes', () => {
 
   describe('POST /users', () => {
     it('should create a new user', async () => {
-      const newUser = { id: 2, iam_id: 'iam_123' };
+      const newUser = { id: 2, iam_id: 'iam_123', username: 'new_user' };
       pool.query.mockResolvedValue({ rows: [newUser] });
 
-      const res = await request(app).post('/users').send({ iam_id: 'iam_123' });
+      const res = await request(app).post('/users').send({ iam_id: 'iam_123', username: 'new_user' });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newUser);
     });

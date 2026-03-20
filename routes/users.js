@@ -38,10 +38,10 @@ router.get("/:id", async function (req, res, next) {
 /* POST new user. */
 router.post("/", authenticateApiKey, async function (req, res, next) {
   try {
-    const { iam_id } = req.body;
+    const { iam_id, username } = req.body;
     const result = await pool.query(
-      "INSERT INTO users (iam_id) VALUES ($1) RETURNING *",
-      [iam_id],
+      "INSERT INTO users (iam_id, username) VALUES ($1, $2) RETURNING *",
+      [iam_id, username],
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
