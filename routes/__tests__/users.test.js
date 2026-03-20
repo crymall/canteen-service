@@ -2,9 +2,17 @@ const request = require('supertest');
 const app = require('../../app');
 const pool = require('../../config/db');
 
-jest.mock('../../config/db', () => ({
-  query: jest.fn(),
-}));
+jest.mock('../../config/db', () => {
+  const mockClient = {
+    query: jest.fn(),
+    release: jest.fn(),
+  };
+  return {
+    query: jest.fn(),
+    connect: jest.fn(() => Promise.resolve(mockClient)),
+    _mockClient: mockClient,
+  };
+});
 
 jest.mock('../../middleware/authorize', () => ({
   authenticateToken: (req, res, next) => next(),
@@ -48,13 +56,25 @@ describe('Users Routes', () => {
   });
 
   describe('POST /users', () => {
-    it('should create a new user', async () => {
+    it('should create a new user and a default Favorites list', async () => {
       const newUser = { id: 2, iam_id: 'iam_123', username: 'new_user' };
-      pool.query.mockResolvedValue({ rows: [newUser] });
+      
+      pool._mockClient.query
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [newUser] }) // INSERT user
+        .mockResolvedValueOnce({ rows: [] }) // INSERT list
+        .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
       const res = await request(app).post('/users').send({ iam_id: 'iam_123', username: 'new_user' });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newUser);
+      
+      const clientCalls = pool._mockClient.query.mock.calls;
+      expect(clientCalls[0][0]).toBe('BEGIN');
+      expect(clientCalls[1][0]).toContain('INSERT INTO users');
+      expect(clientCalls[2][0]).toContain('INSERT INTO lists');
+      expect(clientCalls[2][1]).toEqual([2, 'Favorites']);
+      expect(clientCalls[3][0]).toBe('COMMIT');
     });
   });
 });

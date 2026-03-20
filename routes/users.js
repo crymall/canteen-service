@@ -37,15 +37,28 @@ router.get("/:id", async function (req, res, next) {
 
 /* POST new user. */
 router.post("/", authenticateApiKey, async function (req, res, next) {
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
     const { iam_id, username } = req.body;
-    const result = await pool.query(
+    const result = await client.query(
       "INSERT INTO users (iam_id, username) VALUES ($1, $2) RETURNING *",
       [iam_id, username],
     );
-    res.status(201).json(result.rows[0]);
+    const user = result.rows[0];
+
+    await client.query("INSERT INTO lists (user_id, name) VALUES ($1, $2)", [
+      user.id,
+      "Favorites",
+    ]);
+
+    await client.query("COMMIT");
+    res.status(201).json(user);
   } catch (err) {
+    await client.query("ROLLBACK");
     next(err);
+  } finally {
+    client.release();
   }
 });
 
