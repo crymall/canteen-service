@@ -419,6 +419,30 @@ router.post(
   },
 );
 
+/* DELETE recipe. */
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizePermissions(["write:data"]),
+  async function (req, res, next) {
+    try {
+      const { id } = req.params;
+      const result = await pool.query(
+        "DELETE FROM recipes WHERE id = $1 AND author_id = $2 RETURNING *",
+        [id, req.user.id],
+      );
+      if (result.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ error: "Recipe not found or unauthorized" });
+      }
+      res.json({ message: "Recipe deleted successfully", recipe: result.rows[0] });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /* POST add ingredient to recipe. */
 router.post(
   "/:id/ingredients",

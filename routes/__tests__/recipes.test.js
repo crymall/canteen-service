@@ -122,6 +122,28 @@ describe('Recipes Routes', () => {
     });
   });
 
+  describe('DELETE /recipes/:id', () => {
+    it('should delete a recipe if owned by user', async () => {
+      const mockDeletedRecipe = { id: 1, title: 'Deleted' };
+      pool.query.mockResolvedValue({ rows: [mockDeletedRecipe] });
+      
+      const res = await request(app).delete('/recipes/1');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual({ message: 'Recipe deleted successfully', recipe: mockDeletedRecipe });
+      
+      const [query, params] = pool.query.mock.calls[0];
+      expect(query).toContain('DELETE FROM recipes');
+      expect(params[0]).toBe('1'); // req.params.id
+      expect(params[1]).toBe(1); // req.user.id
+    });
+
+    it('should return 404 if recipe not found or unauthorized', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      const res = await request(app).delete('/recipes/999');
+      expect(res.statusCode).toEqual(404);
+    });
+  });
+
   describe('POST /recipes', () => {
     it('should create a new recipe', async () => {
       const newRecipe = {

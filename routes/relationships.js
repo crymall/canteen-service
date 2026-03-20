@@ -58,10 +58,20 @@ router.get("/:id/followers", authenticateToken, async function (req, res, next) 
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query(
-      "SELECT u.id, u.username FROM follows f JOIN users u ON f.follower_id = u.id WHERE f.following_id = $1 LIMIT $2 OFFSET $3",
-      [req.params.id, limit, offset]
-    );
+    const searchId = req.query.id;
+
+    let queryStr = "SELECT u.id, u.username FROM follows f JOIN users u ON f.follower_id = u.id WHERE f.following_id = $1";
+    const params = [req.params.id];
+
+    if (searchId) {
+      params.push(searchId);
+      queryStr += ` AND u.id = $${params.length}`;
+    }
+
+    queryStr += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(queryStr, params);
     res.json(result.rows);
   } catch (err) {
     next(err);

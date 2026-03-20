@@ -84,6 +84,19 @@ describe("Relationships Routes", () => {
         ["2", 50, 0]
       );
     });
+
+    it("should filter followers by id if provided", async () => {
+      const mockFollowers = [{ id: 3, username: "user3" }];
+      pool.query.mockResolvedValue({ rows: mockFollowers });
+
+      const res = await request(app).get("/relationships/2/followers?id=3");
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockFollowers);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining("AND u.id = $2"),
+        ["2", "3", 50, 0]
+      );
+    });
   });
 
   describe("GET /relationships/:id/following", () => {
