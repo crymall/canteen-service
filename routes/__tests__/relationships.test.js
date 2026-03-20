@@ -127,5 +127,18 @@ describe("Relationships Routes", () => {
         ["2", 50, 0]
       );
     });
+
+    it("should filter friends by query if provided", async () => {
+      const mockFriends = [{ id: 5, username: "user5" }];
+      pool.query.mockResolvedValue({ rows: mockFriends });
+
+      const res = await request(app).get("/relationships/2/friends?query=user");
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockFriends);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining("AND u.username ILIKE $2"),
+        ["2", "%user%", 50, 0]
+      );
+    });
   });
 });
