@@ -75,6 +75,32 @@ describe('Recipes Routes', () => {
       expect(res.body).toEqual(mockRecipe);
     });
 
+    it('should dynamically pluralize ingredients based on quantity', async () => {
+      const mockRecipe = {
+        id: 2,
+        title: 'Fruit Salad',
+        author: { id: 1, username: 'chef_john' },
+        ingredients: [
+          { id: 1, name: 'Apple', quantity: 2, unit: null },
+          { id: 2, name: 'Water', quantity: 1, unit: 'cup' },
+          { id: 3, name: 'Sugar', quantity: 1.5, unit: 'tablespoon' },
+          { id: 4, name: 'Lemon', quantity: 0.5, unit: null }
+        ],
+        tags: [],
+        likes: []
+      };
+      pool.query.mockResolvedValue({ rows: [mockRecipe] });
+
+      const res = await request(app).get('/recipes/2');
+      expect(res.statusCode).toEqual(200);
+      
+      const ingredients = res.body.ingredients;
+      expect(ingredients[0].name).toBe('Apples'); // > 1, no unit -> Pluralize name
+      expect(ingredients[1].unit).toBe('cup'); // == 1 -> Singular unit
+      expect(ingredients[2].unit).toBe('tablespoons'); // > 1 -> Pluralize unit
+      expect(ingredients[3].name).toBe('Lemon'); // < 1 -> Singular name
+    });
+
     it('should return 404 if recipe not found', async () => {
       pool.query.mockResolvedValue({ rows: [] });
       const res = await request(app).get('/recipes/999');

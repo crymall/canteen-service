@@ -1,6 +1,7 @@
 var express = require("express");
 var router = express.Router();
 var pool = require("../config/db");
+var pluralize = require("pluralize");
 var {
   authenticateToken,
   authorizePermissions,
@@ -36,6 +37,14 @@ router.get(
   },
 );
 
+const toTitleCase = (str) => {
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 /* POST new ingredient. */
 router.post(
   "/",
@@ -44,10 +53,15 @@ router.post(
   async function (req, res, next) {
     try {
       const { name } = req.body;
-      const result = await pool.query(
-        "INSERT INTO ingredients (name) VALUES ($1) RETURNING *",
-        [name],
+      const normalizedName = toTitleCase(pluralize.singular(name.trim()));
+      
+      let result = await pool.query(
+        "INSERT INTO ingredients (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING *",
+        [normalizedName],
       );
+      if (result.rows.length === 0) {
+        result = await pool.query("SELECT * FROM ingredients WHERE name = $1", [normalizedName]);
+      }
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);

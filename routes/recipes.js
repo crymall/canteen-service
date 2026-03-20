@@ -1,6 +1,7 @@
 var express = require("express");
 var router = express.Router();
 var pool = require("../config/db");
+var pluralize = require("pluralize");
 var {
   authenticateToken,
   authorizePermissions,
@@ -11,6 +12,29 @@ const optionalAuth = (req, res, next) => {
     return authenticateToken(req, res, next);
   }
   next();
+};
+
+const formatRecipe = (recipe) => {
+  if (!recipe.ingredients) return recipe;
+  const formattedIngredients = recipe.ingredients.map((ing) => {
+    let displayName = ing.name;
+    let displayUnit = ing.unit;
+
+    if (ing.quantity && ing.quantity > 1) {
+      if (ing.unit) {
+        displayUnit = pluralize(ing.unit);
+      } else {
+        displayName = pluralize(ing.name);
+      }
+    }
+
+    return {
+      ...ing,
+      name: displayName,
+      unit: displayUnit,
+    };
+  });
+  return { ...recipe, ingredients: formattedIngredients };
 };
 
 /* GET recipes listing. */
@@ -136,7 +160,7 @@ router.get("/", optionalAuth, async function (req, res, next) {
       LIMIT $${limitParam} OFFSET $${offsetParam}
     `;
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
   }
@@ -189,7 +213,7 @@ router.get("/popular", async function (req, res, next) {
       LIMIT $1 OFFSET $2
     `;
     const result = await pool.query(query, [limit, offset]);
-    res.json(result.rows);
+    res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
   }
@@ -241,7 +265,7 @@ router.get("/user/:userId", async function (req, res, next) {
       LIMIT $2 OFFSET $3
     `;
     const result = await pool.query(query, [userId, limit, offset]);
-    res.json(result.rows);
+    res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
   }
@@ -292,7 +316,7 @@ router.get("/:id", async function (req, res, next) {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Recipe not found" });
     }
-    res.json(result.rows[0]);
+    res.json(formatRecipe(result.rows[0]));
   } catch (err) {
     next(err);
   }
