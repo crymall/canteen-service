@@ -15,9 +15,20 @@ spec:
   tls:
   - hosts:
     - midden.reedgaines.com
-    secretName: canteen-midden-tls-secret
+    - canteen.reedgaines.com
+    secretName: workspace-tls-secret
   rules:
   - host: midden.reedgaines.com
+    http:
+      paths:
+      - path: /canteen(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: canteen-service
+            port:
+              number: 3000
+  - host: canteen.reedgaines.com
     http:
       paths:
       - path: /canteen(/|$)(.*)
