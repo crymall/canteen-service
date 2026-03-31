@@ -1,8 +1,7 @@
 var jwt = require('jsonwebtoken');
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = req.cookies?.token;
 
   if (!token) {
     return res.status(401).json({ error: "Access Denied: No Token Provided" });
@@ -18,19 +17,18 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const authorizePermissions = (allowedPermissions) => {
+const authorizePermissions = (requiredPermission) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: "User not authenticated" });
     }
 
     const userPermissions = req.user.permissions || [];
-    const permissionsAreAcceptable = allowedPermissions.some(permission => userPermissions.includes(permission));
 
-    if (!permissionsAreAcceptable) {
+    if (!userPermissions.includes(requiredPermission)) {
       return res.status(403).json({ 
         error: "Forbidden: You do not have permission to perform this action",
-        required: allowedPermissions
+        required: requiredPermission
       });
     }
 

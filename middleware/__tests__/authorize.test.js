@@ -8,6 +8,7 @@ describe('Authorization Middleware', () => {
 
   beforeEach(() => {
     req = {
+      cookies: {},
       headers: {},
     };
     res = {
@@ -30,7 +31,7 @@ describe('Authorization Middleware', () => {
     });
 
     it('should return 403 if token is invalid', () => {
-      req.headers['authorization'] = 'Bearer invalid_token';
+      req.cookies.token = 'invalid_token';
       
       jwt.verify.mockImplementation((token, secret, cb) => {
         cb(new Error('Invalid token'), null);
@@ -45,7 +46,7 @@ describe('Authorization Middleware', () => {
     });
 
     it('should call next() and set req.user if token is valid', () => {
-      req.headers['authorization'] = 'Bearer valid_token';
+      req.cookies.token = 'valid_token';
       const mockUser = { id: 1, username: 'test' };
 
       jwt.verify.mockImplementation((token, secret, cb) => {
@@ -62,7 +63,7 @@ describe('Authorization Middleware', () => {
 
   describe('authorizePermissions', () => {
     it('should return 401 if user is not authenticated', () => {
-      const middleware = authorizePermissions(['read:data']);
+      const middleware = authorizePermissions('read:data');
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(401);
@@ -72,7 +73,7 @@ describe('Authorization Middleware', () => {
 
     it('should return 403 if user lacks required permission', () => {
       req.user = { permissions: ['read:other'] };
-      const middleware = authorizePermissions(['read:data']);
+      const middleware = authorizePermissions('read:data');
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
@@ -84,7 +85,7 @@ describe('Authorization Middleware', () => {
 
     it('should call next() if user has required permission', () => {
       req.user = { permissions: ['read:data', 'write:data'] };
-      const middleware = authorizePermissions(['read:data']);
+      const middleware = authorizePermissions('read:data');
       middleware(req, res, next);
 
       expect(next).toHaveBeenCalled();
