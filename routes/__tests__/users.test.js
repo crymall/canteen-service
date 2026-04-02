@@ -15,7 +15,10 @@ jest.mock('../../config/db', () => {
 });
 
 jest.mock('../../middleware/authorize', () => ({
-  authenticateToken: (req, res, next) => next(),
+  authenticateToken: (req, res, next) => {
+    req.user = { id: 1 };
+    next();
+  },
   authorizePermissions: (permissions) => (req, res, next) => next(),
   authenticateApiKey: (req, res, next) => next(),
 }));
@@ -33,6 +36,29 @@ describe('Users Routes', () => {
       const res = await request(app).get('/users');
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockUsers);
+    });
+  });
+
+  describe('GET /users/me', () => {
+    it('should return the logged-in user', async () => {
+      const mockUser = { id: 2, iam_id: '1', username: 'test_user' };
+      pool.query.mockResolvedValue({ rows: [mockUser] });
+
+      const res = await request(app).get('/users/me');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toEqual(mockUser);
+      expect(pool.query).toHaveBeenCalledWith(
+        'SELECT * FROM users WHERE iam_id = $1',
+        ['1']
+      );
+    });
+
+    it('should return 404 if user not found in local database', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+
+      const res = await request(app).get('/users/me');
+      expect(res.statusCode).toEqual(404);
+      expect(res.body).toEqual({ error: 'User not found in local database' });
     });
   });
 

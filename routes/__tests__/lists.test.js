@@ -68,7 +68,7 @@ describe('Lists Routes', () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newList);
       const [query, params] = pool.query.mock.calls[0];
-      expect(params[0]).toBe('1');
+      expect(params[0]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -112,7 +112,7 @@ describe('Lists Routes', () => {
       expect(res.body).toEqual(mockRelation);
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('WHERE EXISTS');
-      expect(params[2]).toBe('1');
+      expect(params[2]).toBe('1'); // req.user.id stringified
     });
 
     it('should return 409 if recipe already in list', async () => {
@@ -132,7 +132,7 @@ describe('Lists Routes', () => {
       const res = await request(app).delete('/lists/1/recipes/10');
       expect(res.statusCode).toEqual(200);
       const [query, params] = pool.query.mock.calls[0];
-      expect(params[2]).toBe('1');
+      expect(params[2]).toBe('1'); // req.user.id stringified
     });
   });
 });
