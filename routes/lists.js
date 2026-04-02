@@ -100,8 +100,8 @@ router.delete(
     try {
       const { id } = req.params;
       const result = await pool.query(
-        "DELETE FROM lists WHERE id = $1 AND user_id = $2 RETURNING *",
-        [id, req.user.id],
+        "DELETE FROM lists WHERE id = $1 AND user_id = (SELECT id FROM users WHERE iam_id = $2) RETURNING *",
+        [id, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res
@@ -124,8 +124,10 @@ router.post(
     try {
       const { name } = req.body;
       const result = await pool.query(
-        "INSERT INTO lists (user_id, name) VALUES ($1, $2) RETURNING *",
-        [req.user.id, name],
+        `INSERT INTO lists (user_id, name)
+         SELECT id, $2 FROM users WHERE iam_id = $1
+         RETURNING *`,
+        [req.user.id.toString(), name],
       );
       res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -168,9 +170,9 @@ router.post(
       const result = await pool.query(
         `INSERT INTO list_recipes (list_id, recipe_id)
        SELECT $1, $2
-       WHERE EXISTS (SELECT 1 FROM lists WHERE id = $1 AND user_id = $3)
+       WHERE EXISTS (SELECT 1 FROM lists WHERE id = $1 AND user_id = (SELECT id FROM users WHERE iam_id = $3))
        RETURNING *`,
-        [id, recipe_id, req.user.id],
+        [id, recipe_id, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res
@@ -196,8 +198,8 @@ router.delete(
     try {
       const { id, recipeId } = req.params;
       const result = await pool.query(
-        "DELETE FROM list_recipes lr USING lists l WHERE lr.list_id = l.id AND lr.list_id = $1 AND lr.recipe_id = $2 AND l.user_id = $3 RETURNING lr.*",
-        [id, recipeId, req.user.id],
+        "DELETE FROM list_recipes lr USING lists l WHERE lr.list_id = l.id AND lr.list_id = $1 AND lr.recipe_id = $2 AND l.user_id = (SELECT id FROM users WHERE iam_id = $3) RETURNING lr.*",
+        [id, recipeId, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res

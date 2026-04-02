@@ -7,14 +7,15 @@ var { authenticateToken } = require("../middleware/authorize");
 router.post("/:id", authenticateToken, async function (req, res, next) {
   try {
     const followingId = req.params.id;
-    const followerId = req.user.id;
+    const followerId = req.user.id.toString();
 
-    if (parseInt(followingId) === followerId) {
+    if (followingId === followerId) {
       return res.status(400).json({ error: "Cannot follow yourself" });
     }
 
     await pool.query(
-      "INSERT INTO follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      `INSERT INTO follows (follower_id, following_id) 
+       SELECT id, $2 FROM users WHERE iam_id = $1 ON CONFLICT DO NOTHING`,
       [followerId, followingId]
     );
     res.status(201).json({ message: "Followed successfully" });
@@ -27,9 +28,9 @@ router.post("/:id", authenticateToken, async function (req, res, next) {
 router.delete("/:id", authenticateToken, async function (req, res, next) {
   try {
     const followingId = req.params.id;
-    const followerId = req.user.id;
+    const followerId = req.user.id.toString();
     await pool.query(
-      "DELETE FROM follows WHERE follower_id = $1 AND following_id = $2",
+      "DELETE FROM follows WHERE follower_id = (SELECT id FROM users WHERE iam_id = $1) AND following_id = $2",
       [followerId, followingId]
     );
     res.json({ message: "Unfollowed successfully" });

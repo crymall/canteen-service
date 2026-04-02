@@ -63,7 +63,7 @@ describe("Messages Routes", () => {
       expect(res.body).toEqual(mockUpdatedMessages);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("UPDATE messages"),
-        [true, [1], 1]
+        [true, [1], "1"]
       );
     });
 
@@ -87,7 +87,7 @@ describe("Messages Routes", () => {
       expect(res.body).toEqual(mockThreads);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("WITH last_messages AS"),
-        [1, 50, 0]
+        ["1", 50, 0]
       );
     });
 
@@ -96,7 +96,7 @@ describe("Messages Routes", () => {
       await request(app).get("/messages/threads?limit=10&offset=5");
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("WITH last_messages AS"),
-        [1, 10, 5]
+        ["1", 10, 5]
       );
     });
   });
@@ -111,7 +111,7 @@ describe("Messages Routes", () => {
       expect(res.body).toEqual(mockMessages);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("SELECT m.*"),
-        [1, "2", 50, 0]
+        ["1", "2", 50, 0]
       );
     });
 
@@ -120,7 +120,7 @@ describe("Messages Routes", () => {
       await request(app).get("/messages/2?limit=10&offset=5");
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("SELECT m.*"),
-        [1, "2", 10, 5]
+        ["1", "2", 10, 5]
       );
     });
   });
@@ -135,7 +135,7 @@ describe("Messages Routes", () => {
       expect(res.body).toEqual(mockMessages);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("SELECT m.*"),
-        [1, 50, 0]
+        ["1", 50, 0]
       );
     });
 
@@ -144,7 +144,7 @@ describe("Messages Routes", () => {
       await request(app).get("/messages?limit=10&offset=5");
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("SELECT m.*"),
-        [1, 10, 5]
+        ["1", 10, 5]
       );
     });
   });

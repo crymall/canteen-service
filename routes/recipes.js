@@ -100,18 +100,18 @@ router.get("/", optionalAuth, async function (req, res, next) {
       }
       if (feed === "following") {
         whereClause += ` AND r.author_id IN (
-          SELECT following_id FROM follows WHERE follower_id = $${paramCount}
+          SELECT following_id FROM follows WHERE follower_id = (SELECT id FROM users WHERE iam_id = $${paramCount})
         )`;
-        params.push(req.user.id);
+        params.push(req.user.id.toString());
         paramCount++;
       } else if (feed === "friends") {
         whereClause += ` AND r.author_id IN (
           SELECT f1.following_id 
           FROM follows f1 
           JOIN follows f2 ON f1.following_id = f2.follower_id 
-          WHERE f1.follower_id = $${paramCount} AND f2.following_id = $${paramCount}
+          WHERE f1.follower_id = (SELECT id FROM users WHERE iam_id = $${paramCount}) AND f2.following_id = (SELECT id FROM users WHERE iam_id = $${paramCount})
         )`;
-        params.push(req.user.id);
+        params.push(req.user.id.toString());
         paramCount++;
       }
     }
@@ -351,7 +351,7 @@ router.put(
         (parseInt(wait_time_minutes) || 0);
 
       const result = await pool.query(
-        "UPDATE recipes SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4, cook_time_minutes = $5, wait_time_minutes = $6, total_time_minutes = $7, servings = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 AND author_id = $10 RETURNING *",
+        "UPDATE recipes SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4, cook_time_minutes = $5, wait_time_minutes = $6, total_time_minutes = $7, servings = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 AND author_id = (SELECT id FROM users WHERE iam_id = $10) RETURNING *",
         [
           title,
           description,
@@ -362,7 +362,7 @@ router.put(
           total_time_minutes,
           parsedServings,
           id,
-          req.user.id,
+          req.user.id.toString(),
         ],
       );
       if (result.rows.length === 0) {
@@ -409,9 +409,12 @@ router.post(
         (parseInt(wait_time_minutes) || 0);
 
       const result = await client.query(
-        "INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, wait_time_minutes, total_time_minutes, servings) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+        `INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, wait_time_minutes, total_time_minutes, servings)
+         SELECT id, $2, $3, $4, $5, $6, $7, $8, $9
+         FROM users WHERE iam_id = $1
+         RETURNING *`,
         [
-          req.user.id,
+          req.user.id.toString(),
           title,
           description,
           instructions,
@@ -422,6 +425,12 @@ router.post(
           parsedServings,
         ],
       );
+
+      if (result.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "User does not exist in local database" });
+      }
+
       const recipe = result.rows[0];
 
       if (tags && Array.isArray(tags)) {
@@ -468,8 +477,8 @@ router.delete(
     try {
       const { id } = req.params;
       const result = await pool.query(
-        "DELETE FROM recipes WHERE id = $1 AND author_id = $2 RETURNING *",
-        [id, req.user.id],
+        "DELETE FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $2) RETURNING *",
+        [id, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res
@@ -496,9 +505,9 @@ router.post(
       const result = await pool.query(
         `INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes)
        SELECT $1, $2, $3, $4, $5
-       WHERE EXISTS (SELECT 1 FROM recipes WHERE id = $1 AND author_id = $6)
+       WHERE EXISTS (SELECT 1 FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $6))
        RETURNING *`,
-        [id, ingredient_id, parsedQuantity, unit, notes, req.user.id],
+        [id, ingredient_id, parsedQuantity, unit, notes, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res
@@ -524,9 +533,9 @@ router.post(
       const result = await pool.query(
         `INSERT INTO recipe_tags (recipe_id, tag_id)
        SELECT $1, $2
-       WHERE EXISTS (SELECT 1 FROM recipes WHERE id = $1 AND author_id = $3)
+       WHERE EXISTS (SELECT 1 FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $3))
        RETURNING *`,
-        [id, tag_id, req.user.id],
+        [id, tag_id, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res
@@ -549,9 +558,15 @@ router.post(
     try {
       const { id } = req.params;
       const result = await pool.query(
-        "INSERT INTO recipe_likes (user_id, recipe_id) VALUES ($1, $2) RETURNING *",
-        [req.user.id, id],
+        `INSERT INTO recipe_likes (user_id, recipe_id)
+         SELECT id, $2
+         FROM users WHERE iam_id = $1
+         RETURNING *`,
+        [req.user.id.toString(), id],
       );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "User or Recipe not found" });
+      }
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
@@ -568,8 +583,8 @@ router.delete(
     try {
       const { id } = req.params;
       const result = await pool.query(
-        "DELETE FROM recipe_likes WHERE recipe_id = $1 AND user_id = $2 RETURNING *",
-        [id, req.user.id],
+        "DELETE FROM recipe_likes WHERE recipe_id = $1 AND user_id = (SELECT id FROM users WHERE iam_id = $2) RETURNING *",
+        [id, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res.status(404).json({ error: "Like not found" });
@@ -590,8 +605,8 @@ router.delete(
     try {
       const { id, tagId } = req.params;
       const result = await pool.query(
-        "DELETE FROM recipe_tags rt USING recipes r WHERE rt.recipe_id = r.id AND rt.recipe_id = $1 AND rt.tag_id = $2 AND r.author_id = $3 RETURNING rt.*",
-        [id, tagId, req.user.id],
+        "DELETE FROM recipe_tags rt USING recipes r WHERE rt.recipe_id = r.id AND rt.recipe_id = $1 AND rt.tag_id = $2 AND r.author_id = (SELECT id FROM users WHERE iam_id = $3) RETURNING rt.*",
+        [id, tagId, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res
@@ -614,8 +629,8 @@ router.delete(
     try {
       const { id, ingredientId } = req.params;
       const result = await pool.query(
-        "DELETE FROM recipe_ingredients ri USING recipes r WHERE ri.recipe_id = r.id AND ri.recipe_id = $1 AND ri.ingredient_id = $2 AND r.author_id = $3 RETURNING ri.*",
-        [id, ingredientId, req.user.id],
+        "DELETE FROM recipe_ingredients ri USING recipes r WHERE ri.recipe_id = r.id AND ri.recipe_id = $1 AND ri.ingredient_id = $2 AND r.author_id = (SELECT id FROM users WHERE iam_id = $3) RETURNING ri.*",
+        [id, ingredientId, req.user.id.toString()],
       );
       if (result.rows.length === 0) {
         return res

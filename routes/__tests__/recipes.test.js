@@ -142,9 +142,9 @@ describe('Recipes Routes', () => {
       });
       expect(res.statusCode).toEqual(200);
       const [query, params] = pool.query.mock.calls[0];
-      expect(query).toContain('author_id = $10');
+      expect(query).toContain('author_id = (SELECT id FROM users WHERE iam_id = $10)');
       expect(params[6]).toBe(60); // total_time_minutes
-      expect(params[9]).toBe(1); // req.user.id
+      expect(params[9]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -160,7 +160,7 @@ describe('Recipes Routes', () => {
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('DELETE FROM recipes');
       expect(params[0]).toBe('1'); // req.params.id
-      expect(params[1]).toBe(1); // req.user.id
+      expect(params[1]).toBe('1'); // req.user.id stringified
     });
 
     it('should return 404 if recipe not found or unauthorized', async () => {
@@ -203,7 +203,7 @@ describe('Recipes Routes', () => {
       const clientCalls = pool._mockClient.query.mock.calls;
       expect(clientCalls[0][0]).toBe('BEGIN');
       expect(clientCalls[1][0]).toContain('INSERT INTO recipes');
-      expect(clientCalls[1][1][0]).toBe(1); // req.user.id
+      expect(clientCalls[1][1][0]).toBe('1'); // req.user.id stringified
       expect(clientCalls[1][1][7]).toBe(15); // total_time_minutes
       expect(clientCalls[2][0]).toContain('INSERT INTO recipe_tags');
       expect(clientCalls[3][0]).toContain('INSERT INTO recipe_ingredients');
@@ -218,7 +218,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(201);
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('INSERT INTO recipe_ingredients');
-      expect(params[5]).toBe(1); // req.user.id
+      expect(params[5]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -229,7 +229,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(201);
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('INSERT INTO recipe_tags');
-      expect(params[2]).toBe(1); // req.user.id
+      expect(params[2]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -242,7 +242,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(mockLike);
       const [query, params] = pool.query.mock.calls[0];
-      expect(params[0]).toBe(1); // req.user.id
+      expect(params[0]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -253,7 +253,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(200);
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('DELETE FROM recipe_likes');
-      expect(params[1]).toBe(1); // req.user.id
+      expect(params[1]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -264,7 +264,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(200);
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('DELETE FROM recipe_tags');
-      expect(params[2]).toBe(1); // req.user.id
+      expect(params[2]).toBe('1'); // req.user.id stringified
     });
   });
 
@@ -275,7 +275,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(200);
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('DELETE FROM recipe_ingredients');
-      expect(params[2]).toBe(1); // req.user.id
+      expect(params[2]).toBe('1'); // req.user.id stringified
     });
   });
 });

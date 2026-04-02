@@ -12,8 +12,8 @@ router.post("/", authenticateToken, async function (req, res, next) {
     const friendCheck = await pool.query(
       `SELECT 1 FROM follows f1 
        JOIN follows f2 ON f1.following_id = f2.follower_id 
-       WHERE f1.follower_id = $1 AND f1.following_id = $2 AND f2.following_id = $1`,
-      [req.user.id, receiver_id]
+       WHERE f1.follower_id = (SELECT id FROM users WHERE iam_id = $1) AND f1.following_id = $2 AND f2.following_id = (SELECT id FROM users WHERE iam_id = $1)`,
+      [req.user.id.toString(), receiver_id]
     );
 
     if (friendCheck.rows.length === 0) {
@@ -21,8 +21,10 @@ router.post("/", authenticateToken, async function (req, res, next) {
     }
 
     const result = await pool.query(
-      "INSERT INTO messages (sender_id, receiver_id, content, recipe_id, list_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [req.user.id, receiver_id, content, recipe_id, list_id]
+      `INSERT INTO messages (sender_id, receiver_id, content, recipe_id, list_id) 
+       SELECT id, $2, $3, $4, $5 FROM users WHERE iam_id = $1 
+       RETURNING *`,
+      [req.user.id.toString(), receiver_id, content, recipe_id, list_id]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -43,8 +45,8 @@ router.put("/read", authenticateToken, async function (req, res, next) {
     const status = is_read === undefined ? true : !!is_read;
 
     const result = await pool.query(
-      "UPDATE messages SET is_read = $1 WHERE id = ANY($2::bigint[]) AND receiver_id = $3 RETURNING *",
-      [status, message_ids, req.user.id]
+      "UPDATE messages SET is_read = $1 WHERE id = ANY($2::bigint[]) AND receiver_id = (SELECT id FROM users WHERE iam_id = $3) RETURNING *",
+      [status, message_ids, req.user.id.toString()]
     );
     res.json(result.rows);
   } catch (err) {
@@ -55,21 +57,21 @@ router.put("/read", authenticateToken, async function (req, res, next) {
 /* GET conversation threads (Inbox). */
 router.get("/threads", authenticateToken, async function (req, res, next) {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user.id.toString();
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
     // Get the most recent message for every unique conversation partner
     const result = await pool.query(
       `WITH last_messages AS (
          SELECT DISTINCT ON (
-           CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END
+           CASE WHEN sender_id = (SELECT id FROM users WHERE iam_id = $1) THEN receiver_id ELSE sender_id END
          )
          m.*,
-         CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END as other_user_id
+         CASE WHEN sender_id = (SELECT id FROM users WHERE iam_id = $1) THEN receiver_id ELSE sender_id END as other_user_id
          FROM messages m
-         WHERE sender_id = $1 OR receiver_id = $1
+         WHERE sender_id = (SELECT id FROM users WHERE iam_id = $1) OR receiver_id = (SELECT id FROM users WHERE iam_id = $1)
          ORDER BY 
-           CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END,
+           CASE WHEN sender_id = (SELECT id FROM users WHERE iam_id = $1) THEN receiver_id ELSE sender_id END,
            created_at DESC
        )
        SELECT lm.*, u.username as other_username
@@ -98,11 +100,11 @@ router.get("/:id", authenticateToken, async function (req, res, next) {
        FROM messages m 
        JOIN users sender ON m.sender_id = sender.id 
        JOIN users receiver ON m.receiver_id = receiver.id
-       WHERE (m.sender_id = $1 AND m.receiver_id = $2) 
-          OR (m.sender_id = $2 AND m.receiver_id = $1)
+       WHERE (m.sender_id = (SELECT id FROM users WHERE iam_id = $1) AND m.receiver_id = $2) 
+          OR (m.sender_id = $2 AND m.receiver_id = (SELECT id FROM users WHERE iam_id = $1))
        ORDER BY m.created_at DESC
        LIMIT $3 OFFSET $4`,
-      [req.user.id, otherUserId, limit, offset]
+      [req.user.id.toString(), otherUserId, limit, offset]
     );
     res.json(result.rows);
   } catch (err) {
@@ -122,10 +124,10 @@ router.get("/", authenticateToken, async function (req, res, next) {
        FROM messages m 
        JOIN users sender ON m.sender_id = sender.id 
        JOIN users receiver ON m.receiver_id = receiver.id
-       WHERE m.receiver_id = $1 OR m.sender_id = $1
+       WHERE m.receiver_id = (SELECT id FROM users WHERE iam_id = $1) OR m.sender_id = (SELECT id FROM users WHERE iam_id = $1)
        ORDER BY m.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [req.user.id, limit, offset]
+      [req.user.id.toString(), limit, offset]
     );
     res.json(result.rows);
   } catch (err) {

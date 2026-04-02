@@ -30,7 +30,7 @@ describe("Relationships Routes", () => {
       expect(res.body).toEqual({ message: "Followed successfully" });
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO follows"),
-        [1, "2"]
+        ["1", "2"]
       );
     });
 
@@ -51,7 +51,7 @@ describe("Relationships Routes", () => {
       expect(res.body).toEqual({ message: "Unfollowed successfully" });
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining("DELETE FROM follows"),
-        [1, "2"]
+        ["1", "2"]
       );
     });
   });
