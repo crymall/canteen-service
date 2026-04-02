@@ -1,11 +1,7 @@
 var express = require("express");
 var router = express.Router();
 var pool = require("../config/db");
-var {
-  authenticateToken,
-  authorizePermissions,
-  authenticateApiKey,
-} = require("../middleware/authorize");
+var { authenticateApiKey } = require("../middleware/authorize");
 
 /* GET users listing. */
 router.get("/", async function (req, res, next) {

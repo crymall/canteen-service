@@ -17,7 +17,7 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const authorizePermissions = (requiredPermission) => {
+const authorizePermissions = (requiredPermissions) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: "User not authenticated" });
@@ -25,10 +25,14 @@ const authorizePermissions = (requiredPermission) => {
 
     const userPermissions = req.user.permissions || [];
 
-    if (!userPermissions.includes(requiredPermission)) {
+    const hasAllPermissions = requiredPermissions.every((permission) =>
+      userPermissions.includes(permission)
+    );
+
+    if (!hasAllPermissions) {
       return res.status(403).json({ 
-        error: "Forbidden: You do not have permission to perform this action",
-        required: requiredPermission
+        error: "Forbidden: You do not have the necessary permissions",
+        required: requiredPermissions
       });
     }
 
