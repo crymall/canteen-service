@@ -40,7 +40,7 @@ router.delete("/:id", authenticateToken, async function (req, res, next) {
 });
 
 /* GET relationship counts. */
-router.get("/:id/counts", authenticateToken, async function (req, res, next) {
+router.get("/:id/counts", async function (req, res, next) {
   try {
     const result = await pool.query(
       `SELECT 
@@ -55,7 +55,7 @@ router.get("/:id/counts", authenticateToken, async function (req, res, next) {
 });
 
 /* GET followers. */
-router.get("/:id/followers", authenticateToken, async function (req, res, next) {
+router.get("/:id/followers", async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -80,7 +80,7 @@ router.get("/:id/followers", authenticateToken, async function (req, res, next) 
 });
 
 /* GET following. */
-router.get("/:id/following", authenticateToken, async function (req, res, next) {
+router.get("/:id/following", async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
@@ -95,7 +95,7 @@ router.get("/:id/following", authenticateToken, async function (req, res, next) 
 });
 
 /* GET friends (mutual follows). */
-router.get("/:id/friends", authenticateToken, async function (req, res, next) {
+router.get("/:id/friends", async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
