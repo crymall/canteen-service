@@ -22,8 +22,8 @@ prometheusClient.collectDefaultMetrics();
 // Expose endpoint for Grafana Alloy to scrape
 app.get("/metrics", async (req, res) => {
   try {
-    res.set("Content-Type", client.register.contentType);
-    res.end(await client.register.metrics());
+    res.set("Content-Type", prometheusClient.register.contentType);
+    res.end(await prometheusClient.register.metrics());
   } catch (ex) {
     res.status(500).send(ex.message);
   }
