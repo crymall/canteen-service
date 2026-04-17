@@ -13,8 +13,8 @@ spec:
         app: canteen-server
       annotations:
           prometheus.io/scrape: "true"
-          prometheus.io/port: "3000"
-          prometheus.io/path: "/metrics"
+          prometheus.io/metrics.portNumber: "3000"
+          prometheus.io/metrics.path: "/metrics"
     spec:
       containers:
       - name: canteen-server
