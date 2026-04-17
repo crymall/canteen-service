@@ -4,6 +4,7 @@ var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 var cors = require("cors");
 var rateLimit = require("express-rate-limit");
+var prometheusClient = require("prom-client");
 
 var indexRouter = require("./routes/index");
 var recipesRouter = require("./routes/recipes");
@@ -14,6 +15,19 @@ var usersRouter = require("./routes/users");
 var messagesRouter = require("./routes/messages");
 var relationshipsRouter = require("./routes/relationships");
 
+var app = express();
+
+prometheusClient.collectDefaultMetrics();
+
+// Expose endpoint for Grafana Alloy to scrape
+app.get("/metrics", async (req, res) => {
+  try {
+    res.set("Content-Type", client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (ex) {
+    res.status(500).end(ex);
+  }
+});
 
 var limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -22,8 +36,6 @@ var limiter = rateLimit({
   legacyHeaders: false,
   message: "Too many requests from this IP, please try again later.",
 });
-
-var app = express();
 
 app.use(
   cors({
