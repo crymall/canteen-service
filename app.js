@@ -4,7 +4,7 @@ var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 var cors = require("cors");
 var rateLimit = require("express-rate-limit");
-var promBundle = require('express-prom-bundle');
+var promBundle = require("express-prom-bundle");
 
 var indexRouter = require("./routes/index");
 var recipesRouter = require("./routes/recipes");
@@ -22,10 +22,10 @@ const metricsMiddleware = promBundle({
   includePath: true,
   includeStatusCode: true,
   includeUp: true,
-  customLabels: { app: 'canteen-service' },
+  customLabels: { app: "canteen-service" },
   promClient: {
-    collectDefaultMetrics: {}
-  }
+    collectDefaultMetrics: {},
+  },
 });
 
 app.use(metricsMiddleware);
