@@ -4,7 +4,7 @@ var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 var cors = require("cors");
 var rateLimit = require("express-rate-limit");
-var prometheusClient = require("prom-client");
+var promBundle = require('express-prom-bundle');
 
 var indexRouter = require("./routes/index");
 var recipesRouter = require("./routes/recipes");
@@ -17,17 +17,18 @@ var relationshipsRouter = require("./routes/relationships");
 
 var app = express();
 
-prometheusClient.collectDefaultMetrics();
-
-// Expose endpoint for Grafana Alloy to scrape
-app.get("/metrics", async (req, res) => {
-  try {
-    res.set("Content-Type", prometheusClient.register.contentType);
-    res.end(await prometheusClient.register.metrics());
-  } catch (ex) {
-    res.status(500).send(ex.message);
+const metricsMiddleware = promBundle({
+  includeMethod: true,
+  includePath: true,
+  includeStatusCode: true,
+  includeUp: true,
+  customLabels: { app: 'canteen-service' },
+  promClient: {
+    collectDefaultMetrics: {}
   }
 });
+
+app.use(metricsMiddleware);
 
 var limiter = rateLimit({
   windowMs: 60 * 1000,
