@@ -7,6 +7,14 @@ var {
   authorizePermissions,
 } = require("../middleware/authorize");
 
+const toTitleCase = (str) => {
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 /* GET ingredients listing. */
 router.get(
   "/",
@@ -36,14 +44,6 @@ router.get(
     }
   },
 );
-
-const toTitleCase = (str) => {
-  return str
-    .toLowerCase()
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-};
 
 /* POST new ingredient. */
 router.post(
