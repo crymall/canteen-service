@@ -1,14 +1,14 @@
 /**
  * @type {import('node-pg-migrate').ColumnDefinitions | undefined}
  */
-export const shorthands = undefined;
+exports.shorthands = undefined;
 
 /**
  * @param pgm {import('node-pg-migrate').MigrationBuilder}
  * @param run {() => void | undefined}
  * @returns {Promise<void> | void}
  */
-export const up = (pgm) => {
+exports.up = (pgm) => {
   // 1. Create the new groups table
   pgm.createTable("recipe_ingredient_groups", {
     id: "id",
@@ -76,7 +76,7 @@ export const up = (pgm) => {
  * @param run {() => void | undefined}
  * @returns {Promise<void> | void}
  */
-export const down = (pgm) => {
+exports.down = (pgm) => {
   // 1. Re-add the columns (nullable initially)
   pgm.addColumns("recipe_ingredients", {
     recipe_id: { type: "integer" },
