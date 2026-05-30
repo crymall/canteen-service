@@ -529,7 +529,7 @@ router.post(
             for (const ing of group.ingredients) {
               await client.query(
                 "INSERT INTO recipe_ingredients (group_id, ingredient_id, quantity, unit, notes, position) VALUES ($1, $2, $3, $4, $5, $6)",
-                [groupId, ing.id, ing.quantity === "" ? null : ing.quantity, ing.unit, ing.notes, ingPosition++]
+                [groupId, ing.ingredient_id || ing.id, ing.quantity === "" ? null : ing.quantity, ing.unit, ing.notes, ingPosition++]
               );
             }
           }
