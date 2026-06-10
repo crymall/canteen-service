@@ -103,4 +103,30 @@ describe('Users Routes', () => {
       expect(clientCalls[3][0]).toBe('COMMIT');
     });
   });
+
+  describe('DELETE /users/sync/:iam_id', () => {
+    it('should delete user by iam_id successfully', async () => {
+      const deletedUser = { id: 1, iam_id: 'iam_123', username: 'to_be_deleted' };
+      pool.query.mockResolvedValue({ rowCount: 1, rows: [deletedUser] });
+
+      const res = await request(app).delete('/users/sync/iam_123');
+      
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toEqual('User deleted');
+      expect(res.body.user).toEqual(deletedUser);
+      expect(pool.query).toHaveBeenCalledWith(
+        'DELETE FROM users WHERE iam_id = $1 RETURNING *',
+        ['iam_123']
+      );
+    });
+
+    it('should return 404 if user to delete is not found', async () => {
+      pool.query.mockResolvedValue({ rowCount: 0, rows: [] });
+
+      const res = await request(app).delete('/users/sync/iam_999');
+      
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.error).toEqual('User not found');
+    });
+  });
 });

@@ -73,4 +73,19 @@ router.post("/", authenticateApiKey, async function (req, res, next) {
   }
 });
 
+/* DELETE user sync webhook. */
+router.delete("/sync/:iam_id", authenticateApiKey, async function (req, res, next) {
+  try {
+    const { iam_id } = req.params;
+    const result = await pool.query("DELETE FROM users WHERE iam_id = $1 RETURNING *", [iam_id]);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json({ message: "User deleted", user: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
