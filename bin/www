@@ -8,6 +8,11 @@ var app = require('../app');
 var debug = require('debug')('canteen-service:server');
 var http = require('http');
 
+if (!process.env.JWT_SECRET) {
+  console.error('JWT_SECRET is not set. Configure it (32+ bytes, shared with iam-service) in .env or the environment before starting.');
+  process.exit(1);
+}
+
 /**
  * Get port from environment and store in Express.
  */
