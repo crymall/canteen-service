@@ -144,10 +144,11 @@ router.get("/:id/recipes", async function (req, res, next) {
     const offset = parseInt(req.query.offset) || 0;
     const result = await pool.query(
       `
-      SELECT r.* 
+      SELECT r.*
       FROM recipes r
       JOIN list_recipes lr ON r.id = lr.recipe_id
       WHERE lr.list_id = $1
+      ORDER BY lr.added_at DESC, r.id DESC
       LIMIT $2 OFFSET $3
     `,
       [id, limit, offset],

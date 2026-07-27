@@ -11,7 +11,7 @@ router.get("/", async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query("SELECT * FROM tags LIMIT $1 OFFSET $2", [
+    const result = await pool.query("SELECT * FROM tags ORDER BY name ASC, id ASC LIMIT $1 OFFSET $2", [
       limit,
       offset,
     ]);

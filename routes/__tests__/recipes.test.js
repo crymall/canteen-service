@@ -51,10 +51,41 @@ describe('Recipes Routes', () => {
     it('should filter recipes by multiple IDs', async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes?ids=1,2,3');
-      
+
       const [query, params] = pool.query.mock.calls[0];
       expect(query).toContain('r.id = ANY');
       expect(params[0]).toEqual([1, 2, 3]);
+    });
+
+    it('should expose likes as a viewer flag rather than returning like rows', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      await request(app).get('/recipes');
+
+      const [query] = pool.query.mock.calls[0];
+      // like_count is a denormalized column carried by r.*, so the projection
+      // must not aggregate recipe_likes at all beyond the viewer's own row.
+      expect(query).toContain('AS liked_by_current_user');
+      expect(query).not.toContain("'user_id', rl.user_id");
+      expect(query).not.toContain('COUNT(*)');
+      expect(query).not.toContain('AS likes');
+    });
+
+    it('should resolve the page of ids before hydrating the heavy projections', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      await request(app).get('/recipes');
+
+      const [query, params] = pool.query.mock.calls[0];
+      expect(query).toContain('WITH page AS');
+      expect(query).toContain('ORDER BY r.created_at DESC, r.id DESC');
+      expect(params[params.length - 1]).toBeNull(); // anonymous viewer
+    });
+
+    it('should keep recipes whose author has been deleted', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      await request(app).get('/recipes');
+
+      const [query] = pool.query.mock.calls[0];
+      expect(query).toContain('LEFT JOIN users u ON r.author_id = u.id');
     });
   });
 
@@ -121,7 +152,9 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes/popular');
       const [query] = pool.query.mock.calls[0];
-      expect(query).toContain('ORDER BY like_count DESC');
+      // Sorting reads the denormalized column, so recipe_likes is never scanned.
+      expect(query).toContain('ORDER BY r.like_count DESC, r.id DESC');
+      expect(query).not.toContain('GROUP BY recipe_id');
     });
   });
 
@@ -196,28 +229,36 @@ describe('Recipes Routes', () => {
       pool._mockClient.query
         .mockResolvedValueOnce({ rows: [] }) // BEGIN
         .mockResolvedValueOnce({ rows: [newRecipe] }) // INSERT recipe
-        .mockResolvedValueOnce({ rows: [] }) // INSERT tag
-        .mockResolvedValueOnce({ rows: [{ id: 50 }] }) // INSERT ingredient_group
-        .mockResolvedValueOnce({ rows: [] }) // INSERT ingredient
+        .mockResolvedValueOnce({ rows: [] }) // INSERT tags
+        .mockResolvedValueOnce({ rows: [{ id: 51, position: 1 }, { id: 50, position: 0 }] }) // INSERT ingredient_groups
+        .mockResolvedValueOnce({ rows: [] }) // INSERT ingredients
         .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
       const res = await request(app).post('/recipes').send({
         ...newRecipe,
         tags: [5],
-        ingredient_groups: [{ name: 'Main', ingredients: [{ id: 2, quantity: 1, unit: 'cup' }] }]
+        ingredient_groups: [
+          { name: 'Main', ingredients: [{ id: 2, quantity: 1, unit: 'cup' }] },
+          { name: 'Sauce', ingredients: [{ id: 3, quantity: 2, unit: 'tablespoon' }] }
+        ]
       });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newRecipe);
-      
+
       const clientCalls = pool._mockClient.query.mock.calls;
       expect(clientCalls[0][0]).toBe('BEGIN');
       expect(clientCalls[1][0]).toContain('INSERT INTO recipes');
       expect(clientCalls[1][1][0]).toBe('1'); // req.user.id stringified
       expect(clientCalls[1][1][7]).toBe(15); // total_time_minutes
       expect(clientCalls[2][0]).toContain('INSERT INTO recipe_tags');
+      expect(clientCalls[2][1]).toEqual([1, [5]]); // all tags in one statement
       expect(clientCalls[3][0]).toContain('INSERT INTO recipe_ingredient_groups');
+      expect(clientCalls[3][1]).toEqual([1, ['Main', 'Sauce']]); // all groups in one statement
       expect(clientCalls[4][0]).toContain('INSERT INTO recipe_ingredients');
-      expect(clientCalls[4][1][0]).toBe(50); // group_id mapped correctly
+      // Group ids are mapped back by returned position, not by RETURNING row order.
+      expect(clientCalls[4][1][0]).toEqual([50, 51]);
+      expect(clientCalls[4][1][1]).toEqual([2, 3]);
+      expect(clientCalls[4][1][5]).toEqual([0, 0]);
       expect(clientCalls[5][0]).toBe('COMMIT');
     });
   });
@@ -299,23 +340,25 @@ describe('Recipes Routes', () => {
 
   describe('PUT /recipes/:id/groups/reorder', () => {
     it('should reorder groups', async () => {
-      pool._mockClient.query
+      pool.query
         .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // recipe check
-        .mockResolvedValueOnce({ rows: [] }) // BEGIN
-        .mockResolvedValueOnce({ rows: [] }) // UPDATE 1
-        .mockResolvedValueOnce({ rows: [] }) // UPDATE 2
-        .mockResolvedValueOnce({ rows: [] }); // COMMIT
+        .mockResolvedValueOnce({ rows: [] }); // batched UPDATE
 
       const res = await request(app).put('/recipes/1/groups/reorder').send({ ordered_group_ids: [10, 11] });
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual({ message: 'Groups reordered successfully' });
 
-      const calls = pool._mockClient.query.mock.calls;
+      const calls = pool.query.mock.calls;
+      expect(calls).toHaveLength(2); // one statement regardless of group count
       expect(calls[0][0]).toContain('SELECT id FROM recipes');
-      expect(calls[2][0]).toContain('UPDATE recipe_ingredient_groups SET position = $1');
-      expect(calls[2][1]).toEqual([0, 10, '1']);
-      expect(calls[3][1]).toEqual([1, 11, '1']);
-      expect(calls[4][0]).toBe('COMMIT');
+      expect(calls[1][0]).toContain('UPDATE recipe_ingredient_groups rig');
+      expect(calls[1][1]).toEqual([[10, 11], '1']);
+    });
+
+    it('should reject a non-array payload', async () => {
+      const res = await request(app).put('/recipes/1/groups/reorder').send({ ordered_group_ids: 'nope' });
+      expect(res.statusCode).toEqual(400);
+      expect(pool.query).not.toHaveBeenCalled();
     });
   });
 
@@ -346,14 +389,17 @@ describe('Recipes Routes', () => {
 
   describe('PUT /recipes/:id/ingredients/reorder', () => {
     it('should reorder ingredients', async () => {
-      pool._mockClient.query
+      pool.query
         .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // recipe check
-        .mockResolvedValueOnce({ rows: [] }) // BEGIN
-        .mockResolvedValueOnce({ rows: [] }) // UPDATE 1
-        .mockResolvedValueOnce({ rows: [] }); // COMMIT
+        .mockResolvedValueOnce({ rows: [] }); // batched UPDATE
 
-      const res = await request(app).put('/recipes/1/ingredients/reorder').send({ ordered_ingredient_ids: [100] });
+      const res = await request(app).put('/recipes/1/ingredients/reorder').send({ ordered_ingredient_ids: [100, 101] });
       expect(res.statusCode).toEqual(200);
+
+      const calls = pool.query.mock.calls;
+      expect(calls).toHaveLength(2); // one statement regardless of ingredient count
+      expect(calls[1][0]).toContain('UPDATE recipe_ingredients ri');
+      expect(calls[1][1]).toEqual([[100, 101], '1']);
     });
   });
 
