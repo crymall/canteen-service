@@ -36,8 +36,9 @@ exports.up = (pgm) => {
     method: "gin",
   });
 
-  // Inbox and thread queries filter on sender_id; only receiver_id was indexed.
-  pgm.createIndex("messages", "sender_id");
+  // Inbox and thread queries filter on sender_id or receiver_id and order by
+  // created_at. These composites also serve the bare equality lookups via their
+  // leftmost column, which makes the standalone receiver_id index redundant.
   pgm.createIndex("messages", [
     "receiver_id",
     { name: "created_at", sort: "DESC" },
@@ -46,6 +47,7 @@ exports.up = (pgm) => {
     "sender_id",
     { name: "created_at", sort: "DESC" },
   ]);
+  pgm.dropIndex("messages", "receiver_id", { name: "idx_messages_receiver_id" });
 
   // list_recipes primary key is (list_id, recipe_id), leaving reverse lookups
   // and the recipes cascade delete without an index.
@@ -64,9 +66,9 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.dropIndex("lists", ["user_id", "updated_at"]);
   pgm.dropIndex("list_recipes", "recipe_id");
+  pgm.createIndex("messages", "receiver_id", { name: "idx_messages_receiver_id" });
   pgm.dropIndex("messages", ["sender_id", "created_at"]);
   pgm.dropIndex("messages", ["receiver_id", "created_at"]);
-  pgm.dropIndex("messages", "sender_id");
   pgm.dropIndex("users", "username", { name: "idx_users_username_trgm" });
   pgm.dropIndex("ingredients", "name", { name: "idx_ingredients_name_trgm" });
   pgm.dropIndex("recipes", "title", { name: "idx_recipes_title_trgm" });
