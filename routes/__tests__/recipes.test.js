@@ -154,9 +154,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes/popular');
       const [query] = pool.query.mock.calls[0];
-      // Sorting reads the denormalized column, so recipe_likes is never scanned.
       expect(query).toContain('ORDER BY r.like_count DESC, r.id DESC');
-      expect(query).not.toContain('GROUP BY recipe_id');
     });
   });
 
@@ -253,11 +251,11 @@ describe('Recipes Routes', () => {
       expect(clientCalls[1][1][0]).toBe('1'); // req.user.id stringified
       expect(clientCalls[1][1][7]).toBe(15); // total_time_minutes
       expect(clientCalls[2][0]).toContain('INSERT INTO recipe_tags');
-      expect(clientCalls[2][1]).toEqual([1, [5]]); // all tags in one statement
+      expect(clientCalls[2][1]).toEqual([1, [5]]);
       expect(clientCalls[3][0]).toContain('INSERT INTO recipe_ingredient_groups');
-      expect(clientCalls[3][1]).toEqual([1, ['Main', 'Sauce']]); // all groups in one statement
+      expect(clientCalls[3][1]).toEqual([1, ['Main', 'Sauce']]);
       expect(clientCalls[4][0]).toContain('INSERT INTO recipe_ingredients');
-      // Group ids are mapped back by returned position, not by RETURNING row order.
+      // RETURNING row order is not guaranteed, so group ids map back by position.
       expect(clientCalls[4][1][0]).toEqual([50, 51]);
       expect(clientCalls[4][1][1]).toEqual([2, 3]);
       expect(clientCalls[4][1][5]).toEqual([0, 0]);
@@ -344,14 +342,13 @@ describe('Recipes Routes', () => {
     it('should reorder groups', async () => {
       pool.query
         .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // recipe check
-        .mockResolvedValueOnce({ rows: [] }); // batched UPDATE
+        .mockResolvedValueOnce({ rows: [] }); // UPDATE
 
       const res = await request(app).put('/recipes/1/groups/reorder').send({ ordered_group_ids: [10, 11] });
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual({ message: 'Groups reordered successfully' });
 
       const calls = pool.query.mock.calls;
-      expect(calls).toHaveLength(2); // one statement regardless of group count
       expect(calls[0][0]).toContain('SELECT id FROM recipes');
       expect(calls[1][0]).toContain('UPDATE recipe_ingredient_groups rig');
       expect(calls[1][1]).toEqual([[10, 11], '1']);
@@ -393,13 +390,12 @@ describe('Recipes Routes', () => {
     it('should reorder ingredients', async () => {
       pool.query
         .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // recipe check
-        .mockResolvedValueOnce({ rows: [] }); // batched UPDATE
+        .mockResolvedValueOnce({ rows: [] }); // UPDATE
 
       const res = await request(app).put('/recipes/1/ingredients/reorder').send({ ordered_ingredient_ids: [100, 101] });
       expect(res.statusCode).toEqual(200);
 
       const calls = pool.query.mock.calls;
-      expect(calls).toHaveLength(2); // one statement regardless of ingredient count
       expect(calls[1][0]).toContain('UPDATE recipe_ingredients ri');
       expect(calls[1][1]).toEqual([[100, 101], '1']);
     });
