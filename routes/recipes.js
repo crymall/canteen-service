@@ -8,11 +8,62 @@ var {
 } = require("../middleware/authorize");
 
 const optionalAuth = (req, res, next) => {
-  if (req.headers.authorization) {
+  if (req.cookies?.token) {
     return authenticateToken(req, res, next);
   }
   next();
 };
+
+const currentIamId = (req) => (req.user ? req.user.id.toString() : null);
+
+const recipeProjection = (viewerParam) => `
+  r.*,
+  CASE
+    WHEN u.id IS NULL THEN NULL
+    ELSE json_build_object('id', u.id, 'username', u.username)
+  END AS author,
+  (
+    SELECT COALESCE(json_agg(
+      json_build_object(
+        'id', rig.id,
+        'name', rig.name,
+        'position', rig.position,
+        'ingredients', (
+          SELECT COALESCE(json_agg(
+            json_build_object(
+              'id', ri.id,
+              'ingredient_id', i.id,
+              'name', i.name,
+              'quantity', ri.quantity,
+              'unit', ri.unit,
+              'notes', ri.notes,
+              'position', ri.position
+            ) ORDER BY ri.position ASC
+          ), '[]')
+          FROM recipe_ingredients ri
+          JOIN ingredients i ON ri.ingredient_id = i.id
+          WHERE ri.group_id = rig.id
+        )
+      ) ORDER BY rig.position ASC
+    ), '[]')
+    FROM recipe_ingredient_groups rig
+    WHERE rig.recipe_id = r.id
+  ) AS ingredient_groups,
+  (
+    SELECT COALESCE(json_agg(json_build_object(
+      'id', t.id,
+      'name', t.name
+    )), '[]')
+    FROM recipe_tags rt
+    JOIN tags t ON rt.tag_id = t.id
+    WHERE rt.recipe_id = r.id
+  ) AS tags,
+  EXISTS (
+    SELECT 1 FROM recipe_likes rl
+    WHERE rl.recipe_id = r.id
+      AND rl.user_id = (SELECT id FROM users WHERE iam_id = $${viewerParam})
+  ) AS liked_by_current_user
+`;
 
 const formatRecipe = (recipe) => {
   if (!recipe.ingredient_groups) return recipe;
@@ -125,59 +176,22 @@ router.get("/", optionalAuth, async function (req, res, next) {
     const limitParam = paramCount++;
     params.push(offset);
     const offsetParam = paramCount++;
+    params.push(currentIamId(req));
+    const viewerParam = paramCount++;
 
     const query = `
-      SELECT
-        r.*,
-        json_build_object('id', u.id, 'username', u.username) AS author,
-        (
-          SELECT COALESCE(json_agg(
-            json_build_object(
-              'id', rig.id,
-              'name', rig.name,
-              'position', rig.position,
-              'ingredients', (
-                SELECT COALESCE(json_agg(
-                  json_build_object(
-                    'id', ri.id,
-                    'ingredient_id', i.id,
-                    'name', i.name,
-                    'quantity', ri.quantity,
-                    'unit', ri.unit,
-                    'notes', ri.notes,
-                    'position', ri.position
-                  ) ORDER BY ri.position ASC
-                ), '[]')
-                FROM recipe_ingredients ri
-                JOIN ingredients i ON ri.ingredient_id = i.id
-                WHERE ri.group_id = rig.id
-              )
-            ) ORDER BY rig.position ASC
-          ), '[]')
-          FROM recipe_ingredient_groups rig
-          WHERE rig.recipe_id = r.id
-        ) AS ingredient_groups,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'id', t.id,
-            'name', t.name
-          )), '[]')
-          FROM recipe_tags rt
-          JOIN tags t ON rt.tag_id = t.id
-          WHERE rt.recipe_id = r.id
-        ) AS tags,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'user_id', rl.user_id,
-            'created_at', rl.created_at
-          )), '[]')
-          FROM recipe_likes rl
-          WHERE rl.recipe_id = r.id
-        ) AS likes
-      FROM recipes r
-      JOIN users u ON r.author_id = u.id
-      WHERE 1=1 ${whereClause}
-      LIMIT $${limitParam} OFFSET $${offsetParam}
+      WITH page AS (
+        SELECT r.id
+        FROM recipes r
+        WHERE 1=1 ${whereClause}
+        ORDER BY r.created_at DESC, r.id DESC
+        LIMIT $${limitParam} OFFSET $${offsetParam}
+      )
+      SELECT ${recipeProjection(viewerParam)}
+      FROM page
+      JOIN recipes r ON r.id = page.id
+      LEFT JOIN users u ON r.author_id = u.id
+      ORDER BY r.created_at DESC, r.id DESC
     `;
     const result = await pool.query(query, params);
     res.json(result.rows.map(formatRecipe));
@@ -187,67 +201,24 @@ router.get("/", optionalAuth, async function (req, res, next) {
 });
 
 /* GET recipes sorted by likes. */
-router.get("/popular", async function (req, res, next) {
+router.get("/popular", optionalAuth, async function (req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
     const query = `
-      SELECT
-        r.*,
-        json_build_object('id', u.id, 'username', u.username) AS author,
-        (
-          SELECT COALESCE(json_agg(
-            json_build_object(
-              'id', rig.id,
-              'name', rig.name,
-              'position', rig.position,
-              'ingredients', (
-                SELECT COALESCE(json_agg(
-                  json_build_object(
-                    'id', ri.id,
-                    'ingredient_id', i.id,
-                    'name', i.name,
-                    'quantity', ri.quantity,
-                    'unit', ri.unit,
-                    'notes', ri.notes,
-                    'position', ri.position
-                  ) ORDER BY ri.position ASC
-                ), '[]')
-                FROM recipe_ingredients ri
-                JOIN ingredients i ON ri.ingredient_id = i.id
-                WHERE ri.group_id = rig.id
-              )
-            ) ORDER BY rig.position ASC
-          ), '[]')
-          FROM recipe_ingredient_groups rig
-          WHERE rig.recipe_id = r.id
-        ) AS ingredient_groups,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'id', t.id,
-            'name', t.name
-          )), '[]')
-          FROM recipe_tags rt
-          JOIN tags t ON rt.tag_id = t.id
-          WHERE rt.recipe_id = r.id
-        ) AS tags,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'user_id', rl.user_id,
-            'created_at', rl.created_at
-          )), '[]')
-          FROM recipe_likes rl
-          WHERE rl.recipe_id = r.id
-        ) AS likes,
-        (
-          SELECT COUNT(*) FROM recipe_likes rl WHERE rl.recipe_id = r.id
-        ) AS like_count
-      FROM recipes r
-      JOIN users u ON r.author_id = u.id
-      ORDER BY like_count DESC
-      LIMIT $1 OFFSET $2
+      WITH page AS (
+        SELECT r.id
+        FROM recipes r
+        ORDER BY r.like_count DESC, r.id DESC
+        LIMIT $1 OFFSET $2
+      )
+      SELECT ${recipeProjection(3)}
+      FROM page
+      JOIN recipes r ON r.id = page.id
+      LEFT JOIN users u ON r.author_id = u.id
+      ORDER BY r.like_count DESC, r.id DESC
     `;
-    const result = await pool.query(query, [limit, offset]);
+    const result = await pool.query(query, [limit, offset, currentIamId(req)]);
     res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
@@ -255,66 +226,32 @@ router.get("/popular", async function (req, res, next) {
 });
 
 /* GET recipes by user. */
-router.get("/user/:userId", async function (req, res, next) {
+router.get("/user/:userId", optionalAuth, async function (req, res, next) {
   try {
     const { userId } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 50, 50);
     const offset = parseInt(req.query.offset) || 0;
 
     const query = `
-      SELECT
-        r.*,
-        json_build_object('id', u.id, 'username', u.username) AS author,
-        (
-          SELECT COALESCE(json_agg(
-            json_build_object(
-              'id', rig.id,
-              'name', rig.name,
-              'position', rig.position,
-              'ingredients', (
-                SELECT COALESCE(json_agg(
-                  json_build_object(
-                    'id', ri.id,
-                    'ingredient_id', i.id,
-                    'name', i.name,
-                    'quantity', ri.quantity,
-                    'unit', ri.unit,
-                    'notes', ri.notes,
-                    'position', ri.position
-                  ) ORDER BY ri.position ASC
-                ), '[]')
-                FROM recipe_ingredients ri
-                JOIN ingredients i ON ri.ingredient_id = i.id
-                WHERE ri.group_id = rig.id
-              )
-            ) ORDER BY rig.position ASC
-          ), '[]')
-          FROM recipe_ingredient_groups rig
-          WHERE rig.recipe_id = r.id
-        ) AS ingredient_groups,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'id', t.id,
-            'name', t.name
-          )), '[]')
-          FROM recipe_tags rt
-          JOIN tags t ON rt.tag_id = t.id
-          WHERE rt.recipe_id = r.id
-        ) AS tags,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'user_id', rl.user_id,
-            'created_at', rl.created_at
-          )), '[]')
-          FROM recipe_likes rl
-          WHERE rl.recipe_id = r.id
-        ) AS likes
-      FROM recipes r
-      JOIN users u ON r.author_id = u.id
-      WHERE r.author_id = $1
-      LIMIT $2 OFFSET $3
+      WITH page AS (
+        SELECT r.id
+        FROM recipes r
+        WHERE r.author_id = $1
+        ORDER BY r.created_at DESC, r.id DESC
+        LIMIT $2 OFFSET $3
+      )
+      SELECT ${recipeProjection(4)}
+      FROM page
+      JOIN recipes r ON r.id = page.id
+      LEFT JOIN users u ON r.author_id = u.id
+      ORDER BY r.created_at DESC, r.id DESC
     `;
-    const result = await pool.query(query, [userId, limit, offset]);
+    const result = await pool.query(query, [
+      userId,
+      limit,
+      offset,
+      currentIamId(req),
+    ]);
     res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
@@ -322,62 +259,16 @@ router.get("/user/:userId", async function (req, res, next) {
 });
 
 /* GET single recipe. */
-router.get("/:id", async function (req, res, next) {
+router.get("/:id", optionalAuth, async function (req, res, next) {
   try {
     const { id } = req.params;
     const query = `
-      SELECT
-        r.*,
-        json_build_object('id', u.id, 'username', u.username) AS author,
-        (
-          SELECT COALESCE(json_agg(
-            json_build_object(
-              'id', rig.id,
-              'name', rig.name,
-              'position', rig.position,
-              'ingredients', (
-                SELECT COALESCE(json_agg(
-                  json_build_object(
-                    'id', ri.id,
-                    'ingredient_id', i.id,
-                    'name', i.name,
-                    'quantity', ri.quantity,
-                    'unit', ri.unit,
-                    'notes', ri.notes,
-                    'position', ri.position
-                  ) ORDER BY ri.position ASC
-                ), '[]')
-                FROM recipe_ingredients ri
-                JOIN ingredients i ON ri.ingredient_id = i.id
-                WHERE ri.group_id = rig.id
-              )
-            ) ORDER BY rig.position ASC
-          ), '[]')
-          FROM recipe_ingredient_groups rig
-          WHERE rig.recipe_id = r.id
-        ) AS ingredient_groups,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'id', t.id,
-            'name', t.name
-          )), '[]')
-          FROM recipe_tags rt
-          JOIN tags t ON rt.tag_id = t.id
-          WHERE rt.recipe_id = r.id
-        ) AS tags,
-        (
-          SELECT COALESCE(json_agg(json_build_object(
-            'user_id', rl.user_id,
-            'created_at', rl.created_at
-          )), '[]')
-          FROM recipe_likes rl
-          WHERE rl.recipe_id = r.id
-        ) AS likes
+      SELECT ${recipeProjection(2)}
       FROM recipes r
-      JOIN users u ON r.author_id = u.id
+      LEFT JOIN users u ON r.author_id = u.id
       WHERE r.id = $1
     `;
-    const result = await pool.query(query, [id]);
+    const result = await pool.query(query, [id, currentIamId(req)]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Recipe not found" });
     }
@@ -506,33 +397,51 @@ router.post(
 
       const recipe = result.rows[0];
 
-      if (tags && Array.isArray(tags)) {
-        for (const tagId of tags) {
-          await client.query(
-            "INSERT INTO recipe_tags (recipe_id, tag_id) VALUES ($1, $2)",
-            [recipe.id, tagId],
-          );
-        }
+      if (Array.isArray(tags) && tags.length > 0) {
+        await client.query(
+          "INSERT INTO recipe_tags (recipe_id, tag_id) SELECT $1, unnest($2::int[])",
+          [recipe.id, tags],
+        );
       }
 
-      if (ingredient_groups && Array.isArray(ingredient_groups)) {
-        let groupPosition = 0;
-        for (const group of ingredient_groups) {
-          const groupRes = await client.query(
-            "INSERT INTO recipe_ingredient_groups (recipe_id, name, position) VALUES ($1, $2, $3) RETURNING id",
-            [recipe.id, group.name || "Main", groupPosition++]
-          );
-          const groupId = groupRes.rows[0].id;
+      if (Array.isArray(ingredient_groups) && ingredient_groups.length > 0) {
+        const groupRes = await client.query(
+          `INSERT INTO recipe_ingredient_groups (recipe_id, name, position)
+           SELECT $1, name, ordinality - 1
+           FROM unnest($2::varchar[]) WITH ORDINALITY AS g(name, ordinality)
+           RETURNING id, position`,
+          [recipe.id, ingredient_groups.map((group) => group.name || "Main")],
+        );
 
-          let ingPosition = 0;
-          if (group.ingredients && Array.isArray(group.ingredients)) {
-            for (const ing of group.ingredients) {
-              await client.query(
-                "INSERT INTO recipe_ingredients (group_id, ingredient_id, quantity, unit, notes, position) VALUES ($1, $2, $3, $4, $5, $6)",
-                [groupId, ing.id, ing.quantity === "" ? null : ing.quantity, ing.unit, ing.notes, ingPosition++]
-              );
-            }
-          }
+        const groupIdByPosition = new Map(
+          groupRes.rows.map((row) => [row.position, row.id]),
+        );
+
+        const groupIds = [];
+        const ingredientIds = [];
+        const quantities = [];
+        const units = [];
+        const notes = [];
+        const positions = [];
+
+        ingredient_groups.forEach((group, groupPosition) => {
+          if (!Array.isArray(group.ingredients)) return;
+          group.ingredients.forEach((ing, ingredientPosition) => {
+            groupIds.push(groupIdByPosition.get(groupPosition));
+            ingredientIds.push(ing.id);
+            quantities.push(ing.quantity === "" ? null : ing.quantity);
+            units.push(ing.unit ?? null);
+            notes.push(ing.notes ?? null);
+            positions.push(ingredientPosition);
+          });
+        });
+
+        if (groupIds.length > 0) {
+          await client.query(
+            `INSERT INTO recipe_ingredients (group_id, ingredient_id, quantity, unit, notes, position)
+             SELECT * FROM unnest($1::int[], $2::int[], $3::numeric[], $4::varchar[], $5::varchar[], $6::int[])`,
+            [groupIds, ingredientIds, quantities, units, notes, positions],
+          );
         }
       }
 
@@ -657,8 +566,8 @@ router.post(
       const { id } = req.params;
       const result = await pool.query(
         `INSERT INTO recipe_likes (user_id, recipe_id)
-         SELECT id, $2
-         FROM users WHERE iam_id = $1
+         SELECT id, $2 FROM users WHERE iam_id = $1
+         ON CONFLICT (user_id, recipe_id) DO UPDATE SET recipe_id = EXCLUDED.recipe_id
          RETURNING *`,
         [req.user.id.toString(), id],
       );
@@ -754,7 +663,6 @@ router.put(
   authenticateToken,
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
-    const client = await pool.connect();
     try {
       const { id } = req.params;
       const { ordered_group_ids } = req.body;
@@ -763,7 +671,7 @@ router.put(
         return res.status(400).json({ error: "ordered_group_ids must be an array" });
       }
 
-      const recipeCheck = await client.query(
+      const recipeCheck = await pool.query(
         "SELECT id FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $2)",
         [id, req.user.id.toString()]
       );
@@ -771,20 +679,16 @@ router.put(
         return res.status(404).json({ error: "Recipe not found or unauthorized" });
       }
 
-      await client.query("BEGIN");
-      for (let i = 0; i < ordered_group_ids.length; i++) {
-        await client.query(
-          "UPDATE recipe_ingredient_groups SET position = $1 WHERE id = $2 AND recipe_id = $3",
-          [i, ordered_group_ids[i], id]
-        );
-      }
-      await client.query("COMMIT");
+      await pool.query(
+        `UPDATE recipe_ingredient_groups rig
+         SET position = new_order.ordinality - 1
+         FROM unnest($1::int[]) WITH ORDINALITY AS new_order(group_id, ordinality)
+         WHERE rig.id = new_order.group_id AND rig.recipe_id = $2`,
+        [ordered_group_ids, id]
+      );
       res.json({ message: "Groups reordered successfully" });
     } catch (err) {
-      await client.query("ROLLBACK");
       next(err);
-    } finally {
-      client.release();
     }
   }
 );
@@ -849,7 +753,6 @@ router.put(
   authenticateToken,
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
-    const client = await pool.connect();
     try {
       const { id } = req.params;
       const { ordered_ingredient_ids } = req.body;
@@ -858,7 +761,7 @@ router.put(
         return res.status(400).json({ error: "ordered_ingredient_ids must be an array" });
       }
 
-      const recipeCheck = await client.query(
+      const recipeCheck = await pool.query(
         "SELECT id FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $2)",
         [id, req.user.id.toString()]
       );
@@ -866,23 +769,19 @@ router.put(
         return res.status(404).json({ error: "Recipe not found or unauthorized" });
       }
 
-      await client.query("BEGIN");
-      for (let i = 0; i < ordered_ingredient_ids.length; i++) {
-        await client.query(
-          `UPDATE recipe_ingredients ri
-           SET position = $1
-           FROM recipe_ingredient_groups rig
-           WHERE ri.id = $2 AND ri.group_id = rig.id AND rig.recipe_id = $3`,
-          [i, ordered_ingredient_ids[i], id]
-        );
-      }
-      await client.query("COMMIT");
+      await pool.query(
+        `UPDATE recipe_ingredients ri
+         SET position = new_order.ordinality - 1
+         FROM unnest($1::int[]) WITH ORDINALITY AS new_order(recipe_ingredient_id, ordinality),
+              recipe_ingredient_groups rig
+         WHERE ri.id = new_order.recipe_ingredient_id
+           AND ri.group_id = rig.id
+           AND rig.recipe_id = $2`,
+        [ordered_ingredient_ids, id]
+      );
       res.json({ message: "Ingredients reordered successfully" });
     } catch (err) {
-      await client.query("ROLLBACK");
       next(err);
-    } finally {
-      client.release();
     }
   }
 );

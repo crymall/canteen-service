@@ -1,3 +1,6 @@
+-- DO NOT DO ANYTHING WITH THIS. THIS IS HERE FOR REFERENCE. It's to reflect what the initial DB
+-- looked like before node-pg-migrate.
+
 -- Drop tables in reverse order of dependency to avoid foreign key constraints
 DROP FUNCTION IF EXISTS update_list_timestamp CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;

@@ -1,3 +1,6 @@
+-- DO NOT DO ANYTHING WITH THIS. THIS IS HERE FOR REFERENCE. It's to reflect what the initial DB
+-- looked like before node-pg-migrate.
+
 -- Insert Users (Hardcoded UUIDs for referencing)
 -- Insert Users (Hardcoded IDs for referencing)
 -- Using ON CONFLICT DO NOTHING to make the script idempotent

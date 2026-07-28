@@ -34,6 +34,7 @@ router.get(
         paramCount++;
       }
 
+      query += ` ORDER BY name ASC, id ASC`;
       query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
       params.push(limit, offset);
 
