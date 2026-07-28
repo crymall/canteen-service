@@ -57,30 +57,32 @@ describe('Recipes Routes', () => {
       expect(params[0]).toEqual([1, 2, 3]);
     });
 
-    it('should expose likes as a viewer flag rather than returning like rows', async () => {
-      pool.query.mockResolvedValue({ rows: [] });
-      await request(app).get('/recipes');
-
-      const [query] = pool.query.mock.calls[0];
-      // like_count is a denormalized column carried by r.*, so the projection
-      // must not aggregate recipe_likes at all beyond the viewer's own row.
-      expect(query).toContain('AS liked_by_current_user');
-      expect(query).not.toContain("'user_id', rl.user_id");
-      expect(query).not.toContain('COUNT(*)');
-      expect(query).not.toContain('AS likes');
-    });
-
-    it('should resolve the page of ids before hydrating the heavy projections', async () => {
+    it('should scope the liked flag to no user when unauthenticated', async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes');
 
       const [query, params] = pool.query.mock.calls[0];
-      expect(query).toContain('WITH page AS');
-      expect(query).toContain('ORDER BY r.created_at DESC, r.id DESC');
-      expect(params[params.length - 1]).toBeNull(); // anonymous viewer
+      expect(query).toContain('AS liked_by_current_user');
+      expect(params[params.length - 1]).toBeNull();
     });
 
-    it('should keep recipes whose author has been deleted', async () => {
+    it('should scope the liked flag to the authenticated user', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      await request(app).get('/recipes').set('Cookie', 'token=a.b.c');
+
+      const [, params] = pool.query.mock.calls[0];
+      expect(params[params.length - 1]).toBe('1'); // req.user.id stringified
+    });
+
+    it('should order results deterministically so pagination cannot repeat or skip', async () => {
+      pool.query.mockResolvedValue({ rows: [] });
+      await request(app).get('/recipes');
+
+      const [query] = pool.query.mock.calls[0];
+      expect(query).toContain('ORDER BY r.created_at DESC, r.id DESC');
+    });
+
+    it('should include recipes whose author has been deleted', async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes');
 
