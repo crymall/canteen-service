@@ -16,8 +16,7 @@ const optionalAuth = (req, res, next) => {
 
 const currentIamId = (req) => (req.user ? req.user.id.toString() : null);
 
-// The bucket every ungrouped ingredient falls into. It is created implicitly and
-// may not be renamed or removed, so a payload that drops it is rejected.
+// May not be renamed or removed, so a payload that drops it is rejected.
 const UNGROUPED_GROUP_NAME = "Main";
 
 const nullIfBlank = (value) => (value === "" ? null : value);
@@ -37,9 +36,7 @@ const SIZE_DESCRIPTORS = new Set([
 const unitKey = (unit) =>
   typeof unit === "string" ? unit.trim().toLowerCase() : null;
 
-// Units are stored in their canonical singular form, matching the treatment
-// POST /ingredients already gives ingredient names. Inflection for display then
-// derives from the quantity on read, where the quantity actually lives.
+// Mirrors the singular normalization POST /ingredients applies to names.
 const canonicalUnit = (unit) => {
   const trimmed = typeof unit === "string" ? unit.trim() : unit;
   const value = nullIfBlank(trimmed) ?? null;

@@ -155,13 +155,9 @@ describe('Recipes Routes', () => {
         ingredient_groups: [
           {
             id: 1, name: 'Main', position: 0, ingredients: [
-              // NIST: symbols are unaltered in the plural, and the symbol is
-              // what is being counted, so the ingredient stays singular too.
               { id: 1, ingredient_id: 1, name: 'Butter', quantity: 2, unit: 'oz', position: 0 },
               { id: 2, ingredient_id: 2, name: 'Flour', quantity: 500, unit: 'g', position: 1 },
-              // A size descriptor is an adjective, so the ingredient is counted.
               { id: 3, ingredient_id: 3, name: 'Egg', quantity: 3, unit: 'large', position: 2 },
-              // A spelled-out unit name still inflects.
               { id: 4, ingredient_id: 4, name: 'Sugar', quantity: 2, unit: 'Cup', position: 3 },
             ]
           }
@@ -321,7 +317,6 @@ describe('Recipes Routes', () => {
       const res = await request(app).put('/recipes/1').send({ title: 'Updated', instructions: 'Whisk' });
       expect(res.statusCode).toEqual(200);
       expect(res.body.tags).toEqual([{ id: 5, name: 'Brunch' }]);
-      // The graph is formatted on the way out, exactly as GET /recipes/:id is.
       expect(res.body.ingredient_groups[0].ingredients[0].display_name).toBe('Eggs');
     });
 
