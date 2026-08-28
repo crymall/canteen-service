@@ -23,16 +23,13 @@ const UNIT_SYMBOLS_NEVER_PLURALIZED = new Set([
 ]);
 const unitKey = (unit) =>
   typeof unit === "string" ? unit.trim().toLowerCase() : null;
-
-// Mirrors the singular normalization POST /ingredients applies to names.
-const canonicalUnit = (unit) => {
+const singularUnit = (unit) => {
   const trimmed = typeof unit === "string" ? unit.trim() : unit;
   const value = nullIfBlank(trimmed) ?? null;
   if (!value) return null;
   if (UNIT_SYMBOLS_NEVER_PLURALIZED.has(unitKey(value))) return value;
   return pluralize.singular(value);
 };
-
 const sumMinutes = (...values) =>
   values.reduce((total, value) => total + (parseInt(value) || 0), 0);
 
@@ -96,8 +93,6 @@ const selectRecipeGraph = async (executor, recipeId, viewerIamId) => {
   return result.rows[0] || null;
 };
 
-// Pluralization is presentation, so it is exposed alongside the stored values
-// rather than replacing them.
 const formatRecipe = (recipe) => {
   if (!recipe.ingredient_groups) return recipe;
   const formattedGroups = recipe.ingredient_groups.map((group) => {
@@ -204,7 +199,7 @@ const insertIngredientGroups = async (client, recipeId, ingredientGroups) => {
       groupIds.push(groupIdByPosition.get(groupPosition));
       ingredientIds.push(ing.id);
       quantities.push(nullIfBlank(ing.quantity));
-      units.push(canonicalUnit(ing.unit));
+      units.push(singularUnit(ing.unit));
       notes.push(nullIfBlank(ing.notes) ?? null);
       positions.push(ingredientPosition);
     });
