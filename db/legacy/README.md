@@ -1,0 +1,1 @@
+These exist solely for posterity—this is how the database was initially set up. All actual DB migrations are handled in `../migrations`.

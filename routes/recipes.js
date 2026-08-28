@@ -15,24 +15,12 @@ const optionalAuth = (req, res, next) => {
 };
 
 const currentIamId = (req) => (req.user ? req.user.id.toString() : null);
-
-// May not be renamed or removed, so a payload that drops it is rejected.
 const UNGROUPED_GROUP_NAME = "Main";
-
 const nullIfBlank = (value) => (value === "" ? null : value);
-
-// NIST SP 811: unit symbols are unaltered in the plural — "75 cm", never "75 cms".
-const UNIT_SYMBOLS = new Set([
+const UNIT_SYMBOLS_NEVER_PLURALIZED = new Set([
   "cl", "dl", "fl oz", "g", "gal", "kg", "l", "lb",
   "mg", "ml", "oz", "pt", "qt", "tbsp", "tsp",
 ]);
-
-// Not units but adjectives describing the ingredient, so the ingredient is what
-// gets counted: "3 large Eggs", not "3 larges Egg".
-const SIZE_DESCRIPTORS = new Set([
-  "small", "medium", "large", "extra large", "jumbo",
-]);
-
 const unitKey = (unit) =>
   typeof unit === "string" ? unit.trim().toLowerCase() : null;
 
@@ -41,8 +29,7 @@ const canonicalUnit = (unit) => {
   const trimmed = typeof unit === "string" ? unit.trim() : unit;
   const value = nullIfBlank(trimmed) ?? null;
   if (!value) return null;
-  const key = unitKey(value);
-  if (UNIT_SYMBOLS.has(key) || SIZE_DESCRIPTORS.has(key)) return value;
+  if (UNIT_SYMBOLS_NEVER_PLURALIZED.has(unitKey(value))) return value;
   return pluralize.singular(value);
 };
 
@@ -117,12 +104,11 @@ const formatRecipe = (recipe) => {
     const formattedIngredients = group.ingredients.map((ing) => {
       let displayName = ing.name;
       let displayUnit = ing.unit;
-      const key = unitKey(ing.unit);
 
       if (ing.quantity && ing.quantity > 1) {
-        if (!ing.unit || SIZE_DESCRIPTORS.has(key)) {
+        if (!ing.unit) {
           displayName = pluralize(ing.name);
-        } else if (!UNIT_SYMBOLS.has(key)) {
+        } else if (!UNIT_SYMBOLS_NEVER_PLURALIZED.has(unitKey(ing.unit))) {
           displayUnit = pluralize(ing.unit);
         }
       }

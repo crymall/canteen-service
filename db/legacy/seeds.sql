@@ -43,12 +43,12 @@ SELECT setval('recipes_id_seq', (SELECT MAX(id) FROM recipes));
 INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES 
 (1, (SELECT id FROM ingredients WHERE name = 'All-Purpose Flour'), 1.5, 'cups', NULL),
 (1, (SELECT id FROM ingredients WHERE name = 'Whole Milk'), 1.25, 'cups', NULL),
-(1, (SELECT id FROM ingredients WHERE name = 'Egg'), 1, 'large', NULL)
+(1, (SELECT id FROM ingredients WHERE name = 'Egg'), 1, NULL, 'large')
 ON CONFLICT (recipe_id, ingredient_id) DO NOTHING;
 
 -- Scrambled Eggs (Recipe 2)
 INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES 
-(2, (SELECT id FROM ingredients WHERE name = 'Egg'), 3, 'large', NULL),
+(2, (SELECT id FROM ingredients WHERE name = 'Egg'), 3, NULL, 'large'),
 (2, (SELECT id FROM ingredients WHERE name = 'Unsalted Butter'), 1, 'tbsp', NULL)
 ON CONFLICT (recipe_id, ingredient_id) DO NOTHING;
 
@@ -68,11 +68,11 @@ INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes)
 ON CONFLICT (recipe_id, ingredient_id) DO NOTHING;
 
 -- Spaghetti Bolognese (Recipe 5)
-INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES
-(5, (SELECT id FROM ingredients WHERE name = 'Spaghetti'), 1, 'lb'),
-(5, (SELECT id FROM ingredients WHERE name = 'Ground Beef'), 1, 'lb'),
-(5, (SELECT id FROM ingredients WHERE name = 'Tomato Sauce'), 24, 'oz'),
-(5, (SELECT id FROM ingredients WHERE name = 'Onion'), 1, 'medium')
+INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, notes) VALUES
+(5, (SELECT id FROM ingredients WHERE name = 'Spaghetti'), 1, 'lb', NULL),
+(5, (SELECT id FROM ingredients WHERE name = 'Ground Beef'), 1, 'lb', NULL),
+(5, (SELECT id FROM ingredients WHERE name = 'Tomato Sauce'), 24, 'oz', NULL),
+(5, (SELECT id FROM ingredients WHERE name = 'Onion'), 1, NULL, 'medium')
 ON CONFLICT (recipe_id, ingredient_id) DO NOTHING;
 
 -- Caesar Salad (Recipe 6)

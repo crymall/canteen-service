@@ -147,7 +147,7 @@ describe('Recipes Routes', () => {
       expect(groups[1].ingredients[0].unit).toBe('tablespoon');
     });
 
-    it('should not pluralize unit symbols or size descriptors', async () => {
+    it('should not pluralize unit symbols', async () => {
       const mockRecipe = {
         id: 3,
         title: 'Symbol Test',
@@ -157,7 +157,7 @@ describe('Recipes Routes', () => {
             id: 1, name: 'Main', position: 0, ingredients: [
               { id: 1, ingredient_id: 1, name: 'Butter', quantity: 2, unit: 'oz', position: 0 },
               { id: 2, ingredient_id: 2, name: 'Flour', quantity: 500, unit: 'g', position: 1 },
-              { id: 3, ingredient_id: 3, name: 'Egg', quantity: 3, unit: 'large', position: 2 },
+              { id: 3, ingredient_id: 3, name: 'Apple', quantity: 3, unit: null, position: 2 },
               { id: 4, ingredient_id: 4, name: 'Sugar', quantity: 2, unit: 'Cup', position: 3 },
             ]
           }
@@ -173,8 +173,8 @@ describe('Recipes Routes', () => {
       expect(ings[0].display_name).toBe('Butter');
       expect(ings[1].display_unit).toBe('g');
       expect(ings[1].display_name).toBe('Flour');
-      expect(ings[2].display_unit).toBe('large');
-      expect(ings[2].display_name).toBe('Eggs');
+      expect(ings[2].display_unit).toBeNull();
+      expect(ings[2].display_name).toBe('Apples');
       expect(ings[3].display_unit).toBe('Cups'); // casing preserved
     });
 
@@ -297,14 +297,13 @@ describe('Recipes Routes', () => {
         ingredient_groups: [{ name: 'Main', ingredients: [
           { id: 2, quantity: 2, unit: 'cups' },     // plural -> singular
           { id: 3, quantity: 2, unit: ' Tbsp ' },   // symbol -> trimmed, uninflected
-          { id: 4, quantity: 3, unit: 'large' },    // descriptor -> untouched
-          { id: 5, quantity: 1, unit: '' },         // blank -> null
+          { id: 4, quantity: 1, unit: '' },         // blank -> null
         ]}],
       });
 
       const insert = pool._mockClient.query.mock.calls.find((call) =>
         call[0].includes('INSERT INTO recipe_ingredients'));
-      expect(insert[1][3]).toEqual(['cup', 'Tbsp', 'large', null]);
+      expect(insert[1][3]).toEqual(['cup', 'Tbsp', null]);
     });
 
     it('should respond with the full recipe graph rather than the bare row', async () => {

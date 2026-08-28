@@ -44,12 +44,14 @@ That separation is load-bearing, not cosmetic.
 The edit form seeds its inputs from `unit`/`name` and posts them straight back, and every save rewrites every ingredient row — so if inflection overwrote the stored values, a save that changed nothing would persist `tbsp` as `tbsps`.
 Render `display_*`; round-trip the raw fields.
 
-Two sets govern what inflects, and both are consulted on read and on write:
+`UNIT_SYMBOLS_NEVER_PLURALIZED` (`g`, `oz`, `ml`, `tbsp`, …) is consulted on both read and write.
+[NIST SP 811](https://www.nist.gov/pml/special-publication-811/nist-guide-si-chapter-6-rules-and-style-conventions-printing-and-using) is explicit that unit symbols are unaltered in the plural — `75 cm`, never `75 cms`.
+Any other unit is a spelled-out name and inflects normally above a quantity of one (`2 cups`), which is the same NIST rule for spelled-out names.
+With no unit at all, the ingredient is what gets counted (`2 Apples`).
 
-- `UNIT_SYMBOLS` (`g`, `oz`, `ml`, `tbsp`, …) never inflect. [NIST SP 811](https://www.nist.gov/pml/special-publication-811/nist-guide-si-chapter-6-rules-and-style-conventions-printing-and-using) is explicit that unit symbols are unaltered in the plural — `75 cm`, never `75 cms`. The symbol is also what is being counted, so the ingredient name stays singular with it: `500 g Flour`.
-- `SIZE_DESCRIPTORS` (`large`, `medium`, …) are adjectives rather than units, so the *ingredient* is what gets counted: `3 large Eggs`, not `3 larges Egg`.
-
-Anything else is treated as a spelled-out unit name and inflects normally above a quantity of one (`2 cups`), which matches the same NIST rule for spelled-out names.
+**`unit` holds units, and nothing else.**
+A size or preparation qualifier is not a unit and belongs in `notes`, alongside the `softened` and `halved` already there: `1 Tomato (large)` is `quantity: 1, unit: null, notes: "large"`.
+Nothing in the code accommodates a descriptor in the unit field — put `large` there and it inflects to `larges` like any other unrecognized word.
 
 Note that display quantity is fixed per row today. Should adjustable servings or an aggregating shopping list ever land, the displayed quantity would change without a write — which is precisely why inflection must not migrate onto the stored value.
 
