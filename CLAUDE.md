@@ -69,10 +69,11 @@ Collections are different, because a missing key would otherwise destroy rows th
 ### The `Main` group
 
 `Main` is the bucket ungrouped ingredients fall into.
-It may not be renamed or removed, so a payload that omits it from a recipe that has one is a `400` — and that is why an empty `ingredient_groups` array is refused too.
-`SortableGroup.jsx` in midden-hub enforces the same rule in the UI by rendering the name as static text and omitting the Remove button; the server check exists so the invariant does not depend on the client.
+Every recipe has one, and it may not be renamed or removed.
+Any submitted `ingredient_groups` must therefore contain a group named `Main`, which also makes an empty array a `400`; `POST` synthesizes an empty `Main` when the client names no groups at all.
+That is a rule about the payload rather than about the recipe's current state, so it is checked in `recipePayloadError` before the transaction opens — no lookup, and nothing to leak about a recipe the caller does not own.
 
-A recipe that never had a `Main` group (every group custom-named) is free to stay that way.
+`SortableGroup.jsx` in midden-hub enforces the same rule in the UI by rendering the name as static text and omitting the Remove button; the server check exists so the invariant does not depend on the client.
 
 ### Why replacement rather than a diff
 
@@ -84,10 +85,10 @@ The cost is that those row ids churn on every save.
 
 | Status | Cause |
 | --- | --- |
-| `400` | missing `title` or `instructions`; non-array `tags`, `ingredient_groups` or `ingredients`; duplicate group name; dropping an existing `Main` group |
+| `400` | missing `title` or `instructions`; non-array `tags`, `ingredient_groups` or `ingredients`; duplicate group name; a group list without `Main` |
 | `404` | the recipe does not exist, or the caller is not its author |
 
-Payload validation runs before the transaction opens; the `Main` check runs inside it, after the ownership gate, so it cannot be used to probe recipes the caller does not own.
+All of these are payload checks, so they run before the transaction opens and cost no query.
 
 `unique_recipe_group_name (recipe_id, name)` backs the group-name rule.
 Delete-then-insert inside one transaction never collides with it, but a payload naming two groups the same would — hence the up-front validation, so it surfaces as a `400` rather than a constraint violation escaping as a `500`.

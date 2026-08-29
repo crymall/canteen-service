@@ -152,6 +152,10 @@ const recipePayloadError = ({ title, instructions, tags, ingredient_groups }) =>
     }
   }
 
+  if (!seenGroupNames.has(UNGROUPED_GROUP_NAME)) {
+    return `Every recipe keeps a "${UNGROUPED_GROUP_NAME}" group for ungrouped ingredients.`;
+  }
+
   return null;
 };
 
@@ -449,22 +453,6 @@ router.put(
           .json({ error: "Recipe not found or unauthorized" });
       }
 
-      if (ingredient_groups !== undefined) {
-        const existing = await client.query(
-          "SELECT 1 FROM recipe_ingredient_groups WHERE recipe_id = $1 AND name = $2",
-          [id, UNGROUPED_GROUP_NAME],
-        );
-        const keepsUngrouped = ingredient_groups.some(
-          (group) => groupName(group) === UNGROUPED_GROUP_NAME,
-        );
-        if (existing.rows.length > 0 && !keepsUngrouped) {
-          await client.query("ROLLBACK");
-          return res.status(400).json({
-            error: `The "${UNGROUPED_GROUP_NAME}" ingredient group cannot be renamed or removed.`,
-          });
-        }
-      }
-
       if (tags !== undefined) {
         await client.query("DELETE FROM recipe_tags WHERE recipe_id = $1", [id]);
         await insertRecipeTags(client, id, tags);
@@ -546,7 +534,11 @@ router.post(
       const recipe = result.rows[0];
 
       await insertRecipeTags(client, recipe.id, tags);
-      await insertIngredientGroups(client, recipe.id, ingredient_groups);
+      await insertIngredientGroups(
+        client,
+        recipe.id,
+        ingredient_groups ?? [{ name: UNGROUPED_GROUP_NAME, ingredients: [] }],
+      );
 
       await client.query("COMMIT");
       res.status(201).json(recipe);

@@ -242,7 +242,6 @@ describe('Recipes Routes', () => {
       pool._mockClient.query
         .mockResolvedValueOnce({ rows: [] })                                   // BEGIN
         .mockResolvedValueOnce({ rows: [{ id: 1 }] })                          // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })                      // existing Main lookup
         .mockResolvedValueOnce({ rows: [] })                                   // DELETE recipe_tags
         .mockResolvedValueOnce({ rows: [] })                                   // INSERT recipe_tags
         .mockResolvedValueOnce({ rows: [] })                                   // DELETE recipe_ingredient_groups
@@ -255,36 +254,42 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(200);
 
       const calls = pool._mockClient.query.mock.calls;
-      expect(calls[0][0]).toBe('BEGIN');
+      const statements = calls.map((call) => call[0]);
+      const paramsFor = (fragment) =>
+        calls.find((call) => call[0].includes(fragment))[1];
 
-      expect(calls[1][0]).toContain('UPDATE recipes');
-      expect(calls[1][0]).toContain('author_id = (SELECT id FROM users WHERE iam_id = $10)');
-      expect(calls[1][1][6]).toBe(60); // total_time_minutes
-      expect(calls[1][1][9]).toBe('1'); // req.user.id stringified
+      expect(statements[0]).toBe('BEGIN');
+      expect(statements[statements.length - 1]).toBe('COMMIT');
 
-      expect(calls[3][0]).toContain('DELETE FROM recipe_tags');
-      expect(calls[4][0]).toContain('INSERT INTO recipe_tags');
-      expect(calls[4][1]).toEqual(['1', [5]]);
+      const update = paramsFor('UPDATE recipes');
+      expect(statements.some((sql) =>
+        sql.includes('author_id = (SELECT id FROM users WHERE iam_id = $10)'))).toBe(true);
+      expect(update[6]).toBe(60); // total_time_minutes
+      expect(update[9]).toBe('1'); // req.user.id stringified
 
-      expect(calls[5][0]).toContain('DELETE FROM recipe_ingredient_groups');
-      expect(calls[6][0]).toContain('INSERT INTO recipe_ingredient_groups');
-      expect(calls[6][1]).toEqual(['1', ['Main', 'Sauce']]);
+      expect(statements.some((sql) => sql.includes('DELETE FROM recipe_tags'))).toBe(true);
+      expect(paramsFor('INSERT INTO recipe_tags')).toEqual(['1', [5]]);
 
-      expect(calls[7][0]).toContain('INSERT INTO recipe_ingredients');
+      expect(statements.some((sql) =>
+        sql.includes('DELETE FROM recipe_ingredient_groups'))).toBe(true);
+      expect(paramsFor('INSERT INTO recipe_ingredient_groups')).toEqual(['1', ['Main', 'Sauce']]);
+
+      const ingredients = paramsFor('INSERT INTO recipe_ingredients');
       // RETURNING row order is not guaranteed, so group ids map back by position.
-      expect(calls[7][1][0]).toEqual([60, 61]);
-      expect(calls[7][1][1]).toEqual([2, 3]);
-      expect(calls[7][1][3]).toEqual([null, 'cup']); // blank unit normalized
-      expect(calls[7][1][5]).toEqual([0, 0]);
+      expect(ingredients[0]).toEqual([60, 61]);
+      expect(ingredients[1]).toEqual([2, 3]);
+      expect(ingredients[3]).toEqual([null, 'cup']); // blank unit normalized
+      expect(ingredients[5]).toEqual([0, 0]);
 
-      expect(calls[9][0]).toBe('COMMIT');
+      // Tags are replaced before groups, and both inside the transaction.
+      expect(statements.indexOf('COMMIT')).toBeGreaterThan(
+        statements.findIndex((sql) => sql.includes('INSERT INTO recipe_ingredients')));
     });
 
     it('should store units in their canonical singular form', async () => {
       pool._mockClient.query
         .mockResolvedValueOnce({ rows: [] })                                   // BEGIN
         .mockResolvedValueOnce({ rows: [{ id: 1 }] })                          // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })                      // existing Main lookup
         .mockResolvedValueOnce({ rows: [] })                                   // DELETE recipe_ingredient_groups
         .mockResolvedValueOnce({ rows: [{ id: 60, position: 0 }] })            // INSERT groups
         .mockResolvedValueOnce({ rows: [] })                                   // INSERT recipe_ingredients
@@ -334,26 +339,22 @@ describe('Recipes Routes', () => {
       expect(statements.some((sql) => sql.includes('DELETE FROM recipe_ingredient_groups'))).toBe(false);
     });
 
-    it('should clear collections sent as empty arrays when there is no Main group', async () => {
+    it('should clear the tags when sent an empty array', async () => {
       pool._mockClient.query
         .mockResolvedValueOnce({ rows: [] })            // BEGIN
         .mockResolvedValueOnce({ rows: [{ id: 1 }] })   // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [] })            // existing Main lookup: none
         .mockResolvedValueOnce({ rows: [] })            // DELETE recipe_tags
-        .mockResolvedValueOnce({ rows: [] })            // DELETE recipe_ingredient_groups
         .mockResolvedValueOnce({ rows: [graphRow] })    // SELECT graph
         .mockResolvedValueOnce({ rows: [] });           // COMMIT
 
       const res = await request(app)
         .put('/recipes/1')
-        .send({ title: 'Updated', instructions: 'Whisk', tags: [], ingredient_groups: [] });
+        .send({ title: 'Updated', instructions: 'Whisk', tags: [] });
       expect(res.statusCode).toEqual(200);
 
       const statements = pool._mockClient.query.mock.calls.map((call) => call[0]);
       expect(statements.some((sql) => sql.includes('DELETE FROM recipe_tags'))).toBe(true);
       expect(statements.some((sql) => sql.includes('INSERT INTO recipe_tags'))).toBe(false);
-      expect(statements.some((sql) => sql.includes('DELETE FROM recipe_ingredient_groups'))).toBe(true);
-      expect(statements.some((sql) => sql.includes('INSERT INTO recipe_ingredient_groups'))).toBe(false);
     });
 
     it('should return 404 and roll back when the caller is not the author', async () => {
@@ -371,13 +372,7 @@ describe('Recipes Routes', () => {
       expect(pool._mockClient.release).toHaveBeenCalled();
     });
 
-    it('should refuse to drop the Main group when the recipe already has one', async () => {
-      pool._mockClient.query
-        .mockResolvedValueOnce({ rows: [] })               // BEGIN
-        .mockResolvedValueOnce({ rows: [{ id: 1 }] })      // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })  // existing Main lookup
-        .mockResolvedValueOnce({ rows: [] });              // ROLLBACK
-
+    it('should refuse a group list that omits Main', async () => {
       const res = await request(app).put('/recipes/1').send({
         title: 'Updated',
         instructions: 'Whisk',
@@ -385,41 +380,17 @@ describe('Recipes Routes', () => {
       });
 
       expect(res.statusCode).toEqual(400);
-      expect(res.body.error).toContain('cannot be renamed or removed');
-      expect(pool._mockClient.query.mock.calls.map((call) => call[0])).toContain('ROLLBACK');
+      expect(res.body.error).toContain('keeps a "Main" group');
+      expect(pool.connect).not.toHaveBeenCalled();
     });
 
-    it('should refuse an empty ingredient_groups array while Main exists', async () => {
-      pool._mockClient.query
-        .mockResolvedValueOnce({ rows: [] })               // BEGIN
-        .mockResolvedValueOnce({ rows: [{ id: 1 }] })      // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })  // existing Main lookup
-        .mockResolvedValueOnce({ rows: [] });              // ROLLBACK
-
+    it('should refuse an empty ingredient_groups array, which omits Main', async () => {
       const res = await request(app)
         .put('/recipes/1')
         .send({ title: 'Updated', instructions: 'Whisk', ingredient_groups: [] });
 
       expect(res.statusCode).toEqual(400);
-    });
-
-    it('should allow a recipe that never had a Main group to omit one', async () => {
-      pool._mockClient.query
-        .mockResolvedValueOnce({ rows: [] })            // BEGIN
-        .mockResolvedValueOnce({ rows: [{ id: 1 }] })   // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [] })            // existing Main lookup: none
-        .mockResolvedValueOnce({ rows: [] })            // DELETE recipe_ingredient_groups
-        .mockResolvedValueOnce({ rows: [{ id: 70, position: 0 }] })
-        .mockResolvedValueOnce({ rows: [] })            // INSERT recipe_ingredients
-        .mockResolvedValueOnce({ rows: [graphRow] })    // SELECT graph
-        .mockResolvedValueOnce({ rows: [] });           // COMMIT
-
-      const res = await request(app).put('/recipes/1').send({
-        title: 'Updated',
-        instructions: 'Whisk',
-        ingredient_groups: [{ name: 'Sauce', ingredients: [{ id: 3 }] }],
-      });
-      expect(res.statusCode).toEqual(200);
+      expect(pool.connect).not.toHaveBeenCalled();
     });
 
     it('should reject duplicate group names without opening a transaction', async () => {
@@ -441,7 +412,6 @@ describe('Recipes Routes', () => {
       pool._mockClient.query
         .mockResolvedValueOnce({ rows: [] })                          // BEGIN
         .mockResolvedValueOnce({ rows: [{ id: 1 }] })                 // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })             // existing Main lookup
         .mockResolvedValueOnce({ rows: [] })                          // DELETE recipe_ingredient_groups
         .mockResolvedValueOnce({ rows: [{ id: 60, position: 0 }] })   // INSERT groups
         .mockResolvedValueOnce({ rows: [] })                          // INSERT recipe_ingredients
@@ -482,7 +452,6 @@ describe('Recipes Routes', () => {
       pool._mockClient.query
         .mockResolvedValueOnce({ rows: [] })               // BEGIN
         .mockResolvedValueOnce({ rows: [{ id: 1 }] })      // UPDATE recipes
-        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })  // existing Main lookup
         .mockRejectedValueOnce(new Error('deadlock detected'))
         .mockResolvedValueOnce({ rows: [] });              // ROLLBACK
 
@@ -564,6 +533,36 @@ describe('Recipes Routes', () => {
       expect(clientCalls[4][1][1]).toEqual([2, 3]);
       expect(clientCalls[4][1][5]).toEqual([0, 0]);
       expect(clientCalls[5][0]).toBe('COMMIT');
+    });
+  });
+
+  describe('POST /recipes with no ingredient_groups', () => {
+    it('should give the new recipe a Main bucket anyway', async () => {
+      pool._mockClient.query
+        .mockResolvedValueOnce({ rows: [] })                        // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 9 }] })               // INSERT recipe
+        .mockResolvedValueOnce({ rows: [{ id: 80, position: 0 }] }) // INSERT groups
+        .mockResolvedValueOnce({ rows: [] });                       // COMMIT
+
+      const res = await request(app)
+        .post('/recipes')
+        .send({ title: 'Bare', instructions: 'Do it' });
+
+      expect(res.statusCode).toEqual(201);
+      const groupInsert = pool._mockClient.query.mock.calls.find((call) =>
+        call[0].includes('INSERT INTO recipe_ingredient_groups'));
+      expect(groupInsert[1]).toEqual([9, ['Main']]);
+    });
+
+    it('should still reject a group list that omits Main', async () => {
+      const res = await request(app).post('/recipes').send({
+        title: 'Bare',
+        instructions: 'Do it',
+        ingredient_groups: [{ name: 'Sauce', ingredients: [] }],
+      });
+
+      expect(res.statusCode).toEqual(400);
+      expect(pool.connect).not.toHaveBeenCalled();
     });
   });
 
