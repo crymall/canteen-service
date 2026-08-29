@@ -15,6 +15,26 @@ const optionalAuth = (req, res, next) => {
 };
 
 const currentIamId = (req) => (req.user ? req.user.id.toString() : null);
+const UNGROUPED_GROUP_NAME = "Main";
+const nullIfBlank = (value) => (value === "" ? null : value);
+const UNIT_SYMBOLS_NEVER_PLURALIZED = new Set([
+  "cl", "dl", "fl oz", "g", "gal", "kg", "l", "lb",
+  "mg", "ml", "oz", "pt", "qt", "tbsp", "tsp",
+]);
+const unitKey = (unit) =>
+  typeof unit === "string" ? unit.trim().toLowerCase() : null;
+const singularUnit = (unit) => {
+  const trimmed = typeof unit === "string" ? unit.trim() : unit;
+  const value = nullIfBlank(trimmed) ?? null;
+  if (!value) return null;
+  if (UNIT_SYMBOLS_NEVER_PLURALIZED.has(unitKey(value))) return value;
+  return pluralize.singular(value);
+};
+const sumMinutes = (...values) =>
+  values.reduce((total, value) => total + (parseInt(value) || 0), 0);
+const groupName = (group) => group?.name || UNGROUPED_GROUP_NAME;
+const CREATE = "create";
+const UPDATE = "update";
 
 const recipeProjection = (viewerParam) => `
   r.*,
@@ -65,6 +85,17 @@ const recipeProjection = (viewerParam) => `
   ) AS liked_by_current_user
 `;
 
+const selectRecipeGraph = async (executor, recipeId, viewerIamId) => {
+  const result = await executor.query(
+    `SELECT ${recipeProjection(2)}
+     FROM recipes r
+     LEFT JOIN users u ON r.author_id = u.id
+     WHERE r.id = $1`,
+    [recipeId, viewerIamId],
+  );
+  return result.rows[0] || null;
+};
+
 const formatRecipe = (recipe) => {
   if (!recipe.ingredient_groups) return recipe;
   const formattedGroups = recipe.ingredient_groups.map((group) => {
@@ -73,21 +104,118 @@ const formatRecipe = (recipe) => {
       let displayUnit = ing.unit;
 
       if (ing.quantity && ing.quantity > 1) {
-        if (ing.unit) {
-          displayUnit = pluralize(ing.unit);
-        } else {
+        if (!ing.unit) {
           displayName = pluralize(ing.name);
+        } else if (!UNIT_SYMBOLS_NEVER_PLURALIZED.has(unitKey(ing.unit))) {
+          displayUnit = pluralize(ing.unit);
         }
       }
       return {
         ...ing,
-        name: displayName,
-        unit: displayUnit,
+        display_name: displayName,
+        display_unit: displayUnit,
       };
     });
     return { ...group, ingredients: formattedIngredients };
   });
   return { ...recipe, ingredient_groups: formattedGroups };
+};
+
+const recipePayloadError = (
+  { title, instructions, tags, ingredient_groups },
+  operation,
+) => {
+  if (typeof title !== "string" || title.trim() === "") {
+    return "A title is required.";
+  }
+
+  if (typeof instructions !== "string" || instructions.trim() === "") {
+    return "Instructions are required.";
+  }
+
+  if (tags !== undefined && !Array.isArray(tags)) {
+    return "tags must be an array of tag ids";
+  }
+
+  if (ingredient_groups === undefined) {
+    return operation === CREATE
+      ? "ingredient_groups is required when creating a recipe"
+      : null;
+  }
+  if (!Array.isArray(ingredient_groups)) {
+    return "ingredient_groups must be an array";
+  }
+
+  const seenGroupNames = new Set();
+  for (const group of ingredient_groups) {
+    const name = groupName(group);
+    if (seenGroupNames.has(name)) {
+      return `Two ingredient groups are both named "${name}". Give each group its own name.`;
+    }
+    seenGroupNames.add(name);
+
+    if (group?.ingredients === undefined) continue;
+    if (!Array.isArray(group.ingredients)) {
+      return `Ingredients for group "${name}" must be an array`;
+    }
+  }
+
+  if (!seenGroupNames.has(UNGROUPED_GROUP_NAME)) {
+    return `Every recipe keeps a "${UNGROUPED_GROUP_NAME}" group for ungrouped ingredients.`;
+  }
+
+  return null;
+};
+
+const insertRecipeTags = async (client, recipeId, tags) => {
+  if (!Array.isArray(tags) || tags.length === 0) return;
+  await client.query(
+    "INSERT INTO recipe_tags (recipe_id, tag_id) SELECT $1, unnest($2::int[])",
+    [recipeId, tags],
+  );
+};
+
+const insertIngredientGroups = async (client, recipeId, ingredientGroups) => {
+  if (!Array.isArray(ingredientGroups) || ingredientGroups.length === 0) return;
+
+  const groupRes = await client.query(
+    `INSERT INTO recipe_ingredient_groups (recipe_id, name, position)
+     SELECT $1, name, ordinality - 1
+     FROM unnest($2::varchar[]) WITH ORDINALITY AS g(name, ordinality)
+     RETURNING id, position`,
+    [recipeId, ingredientGroups.map(groupName)],
+  );
+
+  const groupIdByPosition = new Map(
+    groupRes.rows.map((row) => [row.position, row.id]),
+  );
+
+  const groupIds = [];
+  const ingredientIds = [];
+  const quantities = [];
+  const units = [];
+  const notes = [];
+  const positions = [];
+
+  ingredientGroups.forEach((group, groupPosition) => {
+    if (!Array.isArray(group.ingredients)) return;
+    group.ingredients.forEach((ing, ingredientPosition) => {
+      groupIds.push(groupIdByPosition.get(groupPosition));
+      ingredientIds.push(ing.id);
+      quantities.push(nullIfBlank(ing.quantity));
+      units.push(singularUnit(ing.unit));
+      notes.push(nullIfBlank(ing.notes) ?? null);
+      positions.push(ingredientPosition);
+    });
+  });
+
+  if (groupIds.length === 0) return;
+
+  await client.query(
+    `INSERT INTO recipe_ingredients (group_id, ingredient_id, quantity, unit, notes, position)
+     SELECT * FROM unnest($1::int[], $2::int[], $3::numeric[], $4::varchar[], $5::varchar[], $6::int[])`,
+    [groupIds, ingredientIds, quantities, units, notes, positions],
+  );
 };
 
 /* GET recipes listing. */
@@ -125,10 +253,10 @@ router.get("/", optionalAuth, async function (req, res, next) {
 
     if (tags && Array.isArray(tags) && tags.length > 0) {
       whereClause += ` AND r.id IN (
-        SELECT recipe_id 
-        FROM recipe_tags 
-        WHERE tag_id = ANY($${paramCount}::int[]) 
-        GROUP BY recipe_id 
+        SELECT recipe_id
+        FROM recipe_tags
+        WHERE tag_id = ANY($${paramCount}::int[])
+        GROUP BY recipe_id
         HAVING COUNT(DISTINCT tag_id) = array_length($${paramCount}::int[], 1)
       )`;
       params.push(tags);
@@ -137,11 +265,11 @@ router.get("/", optionalAuth, async function (req, res, next) {
 
     if (ingredients && Array.isArray(ingredients) && ingredients.length > 0) {
       whereClause += ` AND r.id IN (
-        SELECT rig.recipe_id 
+        SELECT rig.recipe_id
         FROM recipe_ingredients ri
         JOIN recipe_ingredient_groups rig ON ri.group_id = rig.id
-        WHERE ri.ingredient_id = ANY($${paramCount}::int[]) 
-        GROUP BY rig.recipe_id 
+        WHERE ri.ingredient_id = ANY($${paramCount}::int[])
+        GROUP BY rig.recipe_id
         HAVING COUNT(DISTINCT ri.ingredient_id) = array_length($${paramCount}::int[], 1)
       )`;
       params.push(ingredients);
@@ -162,9 +290,9 @@ router.get("/", optionalAuth, async function (req, res, next) {
         paramCount++;
       } else if (feed === "friends") {
         whereClause += ` AND r.author_id IN (
-          SELECT f1.following_id 
-          FROM follows f1 
-          JOIN follows f2 ON f1.following_id = f2.follower_id 
+          SELECT f1.following_id
+          FROM follows f1
+          JOIN follows f2 ON f1.following_id = f2.follower_id
           WHERE f1.follower_id = (SELECT id FROM users WHERE iam_id = $${paramCount}) AND f2.following_id = (SELECT id FROM users WHERE iam_id = $${paramCount})
         )`;
         params.push(req.user.id.toString());
@@ -261,77 +389,100 @@ router.get("/user/:userId", optionalAuth, async function (req, res, next) {
 /* GET single recipe. */
 router.get("/:id", optionalAuth, async function (req, res, next) {
   try {
-    const { id } = req.params;
-    const query = `
-      SELECT ${recipeProjection(2)}
-      FROM recipes r
-      LEFT JOIN users u ON r.author_id = u.id
-      WHERE r.id = $1
-    `;
-    const result = await pool.query(query, [id, currentIamId(req)]);
-    if (result.rows.length === 0) {
+    const recipe = await selectRecipeGraph(
+      pool,
+      req.params.id,
+      currentIamId(req),
+    );
+    if (!recipe) {
       return res.status(404).json({ error: "Recipe not found" });
     }
-    res.json(formatRecipe(result.rows[0]));
+    res.json(formatRecipe(recipe));
   } catch (err) {
     next(err);
   }
 });
 
-/* PUT update recipe. */
+/* PUT update recipe, its tags, and its ingredient groups in one transaction. */
 router.put(
   "/:id",
   authenticateToken,
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
+    const {
+      title,
+      description,
+      instructions,
+      prep_time_minutes,
+      cook_time_minutes,
+      wait_time_minutes,
+      servings,
+      tags,
+      ingredient_groups,
+    } = req.body;
+
+    const payloadError = recipePayloadError(req.body, UPDATE);
+    if (payloadError) {
+      return res.status(400).json({ error: payloadError });
+    }
+
+    const { id } = req.params;
+    const iamId = req.user.id.toString();
+    const client = await pool.connect();
+
     try {
-      const { id } = req.params;
-      const {
-        title,
-        description,
-        instructions,
-        prep_time_minutes,
-        cook_time_minutes,
-        wait_time_minutes,
-        servings,
-      } = req.body;
+      await client.query("BEGIN");
 
-      const parsedPrepTime =
-        prep_time_minutes === "" ? null : prep_time_minutes;
-      const parsedCookTime =
-        cook_time_minutes === "" ? null : cook_time_minutes;
-      const parsedWaitTime =
-        wait_time_minutes === "" ? null : wait_time_minutes;
-      const parsedServings = servings === "" ? null : servings;
-
-      const total_time_minutes =
-        (parseInt(prep_time_minutes) || 0) +
-        (parseInt(cook_time_minutes) || 0) +
-        (parseInt(wait_time_minutes) || 0);
-
-      const result = await pool.query(
-        "UPDATE recipes SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4, cook_time_minutes = $5, wait_time_minutes = $6, total_time_minutes = $7, servings = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 AND author_id = (SELECT id FROM users WHERE iam_id = $10) RETURNING *",
+      const updated = await client.query(
+        `UPDATE recipes
+         SET title = $1, description = $2, instructions = $3, prep_time_minutes = $4,
+             cook_time_minutes = $5, wait_time_minutes = $6, total_time_minutes = $7,
+             servings = $8, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $9 AND author_id = (SELECT id FROM users WHERE iam_id = $10)
+         RETURNING id`,
         [
           title,
           description,
           instructions,
-          parsedPrepTime,
-          parsedCookTime,
-          parsedWaitTime,
-          total_time_minutes,
-          parsedServings,
+          nullIfBlank(prep_time_minutes),
+          nullIfBlank(cook_time_minutes),
+          nullIfBlank(wait_time_minutes),
+          sumMinutes(prep_time_minutes, cook_time_minutes, wait_time_minutes),
+          nullIfBlank(servings),
           id,
-          req.user.id.toString(),
+          iamId,
         ],
       );
-      if (result.rows.length === 0) {
+
+      if (updated.rows.length === 0) {
+        await client.query("ROLLBACK");
         return res
           .status(404)
           .json({ error: "Recipe not found or unauthorized" });
       }
-      res.json(result.rows[0]);
+
+      if (tags !== undefined) {
+        await client.query("DELETE FROM recipe_tags WHERE recipe_id = $1", [id]);
+        await insertRecipeTags(client, id, tags);
+      }
+
+      if (ingredient_groups !== undefined) {
+        await client.query(
+          "DELETE FROM recipe_ingredient_groups WHERE recipe_id = $1",
+          [id],
+        );
+        await insertIngredientGroups(client, id, ingredient_groups);
+      }
+
+      const recipe = await selectRecipeGraph(client, id, iamId);
+
+      await client.query("COMMIT");
+      res.json(formatRecipe(recipe));
     } catch (err) {
+      await client.query("ROLLBACK");
       next(err);
+    } finally {
+      client.release();
     }
   },
 );
@@ -342,33 +493,26 @@ router.post(
   authenticateToken,
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
+    const {
+      title,
+      description,
+      instructions,
+      prep_time_minutes,
+      cook_time_minutes,
+      wait_time_minutes,
+      servings,
+      tags,
+      ingredient_groups,
+    } = req.body;
+
+    const payloadError = recipePayloadError(req.body, CREATE);
+    if (payloadError) {
+      return res.status(400).json({ error: payloadError });
+    }
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const {
-        title,
-        description,
-        instructions,
-        prep_time_minutes,
-        cook_time_minutes,
-        wait_time_minutes,
-        servings,
-        tags,
-        ingredient_groups,
-      } = req.body;
-
-      const parsedPrepTime =
-        prep_time_minutes === "" ? null : prep_time_minutes;
-      const parsedCookTime =
-        cook_time_minutes === "" ? null : cook_time_minutes;
-      const parsedWaitTime =
-        wait_time_minutes === "" ? null : wait_time_minutes;
-      const parsedServings = servings === "" ? null : servings;
-
-      const total_time_minutes =
-        (parseInt(prep_time_minutes) || 0) +
-        (parseInt(cook_time_minutes) || 0) +
-        (parseInt(wait_time_minutes) || 0);
 
       const result = await client.query(
         `INSERT INTO recipes (author_id, title, description, instructions, prep_time_minutes, cook_time_minutes, wait_time_minutes, total_time_minutes, servings)
@@ -380,11 +524,11 @@ router.post(
           title,
           description,
           instructions,
-          parsedPrepTime,
-          parsedCookTime,
-          parsedWaitTime,
-          total_time_minutes,
-          parsedServings,
+          nullIfBlank(prep_time_minutes),
+          nullIfBlank(cook_time_minutes),
+          nullIfBlank(wait_time_minutes),
+          sumMinutes(prep_time_minutes, cook_time_minutes, wait_time_minutes),
+          nullIfBlank(servings),
         ],
       );
 
@@ -397,53 +541,8 @@ router.post(
 
       const recipe = result.rows[0];
 
-      if (Array.isArray(tags) && tags.length > 0) {
-        await client.query(
-          "INSERT INTO recipe_tags (recipe_id, tag_id) SELECT $1, unnest($2::int[])",
-          [recipe.id, tags],
-        );
-      }
-
-      if (Array.isArray(ingredient_groups) && ingredient_groups.length > 0) {
-        const groupRes = await client.query(
-          `INSERT INTO recipe_ingredient_groups (recipe_id, name, position)
-           SELECT $1, name, ordinality - 1
-           FROM unnest($2::varchar[]) WITH ORDINALITY AS g(name, ordinality)
-           RETURNING id, position`,
-          [recipe.id, ingredient_groups.map((group) => group.name || "Main")],
-        );
-
-        const groupIdByPosition = new Map(
-          groupRes.rows.map((row) => [row.position, row.id]),
-        );
-
-        const groupIds = [];
-        const ingredientIds = [];
-        const quantities = [];
-        const units = [];
-        const notes = [];
-        const positions = [];
-
-        ingredient_groups.forEach((group, groupPosition) => {
-          if (!Array.isArray(group.ingredients)) return;
-          group.ingredients.forEach((ing, ingredientPosition) => {
-            groupIds.push(groupIdByPosition.get(groupPosition));
-            ingredientIds.push(ing.id);
-            quantities.push(ing.quantity === "" ? null : ing.quantity);
-            units.push(ing.unit ?? null);
-            notes.push(ing.notes ?? null);
-            positions.push(ingredientPosition);
-          });
-        });
-
-        if (groupIds.length > 0) {
-          await client.query(
-            `INSERT INTO recipe_ingredients (group_id, ingredient_id, quantity, unit, notes, position)
-             SELECT * FROM unnest($1::int[], $2::int[], $3::numeric[], $4::varchar[], $5::varchar[], $6::int[])`,
-            [groupIds, ingredientIds, quantities, units, notes, positions],
-          );
-        }
-      }
+      await insertRecipeTags(client, recipe.id, tags);
+      await insertIngredientGroups(client, recipe.id, ingredient_groups);
 
       await client.query("COMMIT");
       res.status(201).json(recipe);
@@ -477,79 +576,6 @@ router.delete(
         message: "Recipe deleted successfully",
         recipe: result.rows[0],
       });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/* POST add ingredient to recipe. */
-router.post(
-  "/:id/ingredients",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id } = req.params;
-      const { ingredient_id, quantity, unit, notes, group_name } = req.body;
-      const parsedQuantity = quantity === "" ? null : quantity;
-
-      const recipeCheck = await pool.query(
-        "SELECT id FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $2)",
-        [id, req.user.id.toString()]
-      );
-      if (recipeCheck.rows.length === 0) {
-        return res.status(404).json({ error: "Recipe not found or unauthorized" });
-      }
-
-      let groupRes = await pool.query(
-        "SELECT id FROM recipe_ingredient_groups WHERE recipe_id = $1 AND name = $2",
-        [id, group_name || "Main"]
-      );
-      let groupId;
-      if (groupRes.rows.length > 0) {
-        groupId = groupRes.rows[0].id;
-      } else {
-        const maxPosRes = await pool.query("SELECT COALESCE(MAX(position) + 1, 0) as next_pos FROM recipe_ingredient_groups WHERE recipe_id = $1", [id]);
-        const insertGroup = await pool.query("INSERT INTO recipe_ingredient_groups (recipe_id, name, position) VALUES ($1, $2, $3) RETURNING id", [id, group_name || "Main", maxPosRes.rows[0].next_pos]);
-        groupId = insertGroup.rows[0].id;
-      }
-
-      const maxIngPosRes = await pool.query("SELECT COALESCE(MAX(position) + 1, 0) as next_pos FROM recipe_ingredients WHERE group_id = $1", [groupId]);
-
-      const result = await pool.query(
-        `INSERT INTO recipe_ingredients (group_id, ingredient_id, quantity, unit, notes, position) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [groupId, ingredient_id, parsedQuantity, unit, notes, maxIngPosRes.rows[0].next_pos]
-      );
-      res.status(201).json(result.rows[0]);
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/* POST add tag to recipe. */
-router.post(
-  "/:id/tags",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id } = req.params;
-      const { tag_id } = req.body;
-      const result = await pool.query(
-        `INSERT INTO recipe_tags (recipe_id, tag_id)
-       SELECT $1, $2
-       WHERE EXISTS (SELECT 1 FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $3))
-       RETURNING *`,
-        [id, tag_id, req.user.id.toString()],
-      );
-      if (result.rows.length === 0) {
-        return res
-          .status(404)
-          .json({ error: "Recipe not found or unauthorized" });
-      }
-      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -601,220 +627,6 @@ router.delete(
       next(err);
     }
   },
-);
-
-/* DELETE recipe tag. */
-router.delete(
-  "/:id/tags/:tagId",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id, tagId } = req.params;
-      const result = await pool.query(
-        "DELETE FROM recipe_tags rt USING recipes r WHERE rt.recipe_id = r.id AND rt.recipe_id = $1 AND rt.tag_id = $2 AND r.author_id = (SELECT id FROM users WHERE iam_id = $3) RETURNING rt.*",
-        [id, tagId, req.user.id.toString()],
-      );
-      if (result.rows.length === 0) {
-        return res
-          .status(404)
-          .json({ error: "Tag not found on recipe or unauthorized" });
-      }
-      res.json({ message: "Tag removed from recipe" });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/* DELETE recipe ingredient. */
-router.delete(
-  "/:id/ingredients/:ingredientId",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id, ingredientId } = req.params;
-      const group = req.query.group || "Main";
-      const result = await pool.query(
-        `DELETE FROM recipe_ingredients ri 
-         USING recipe_ingredient_groups rig, recipes r 
-         WHERE ri.group_id = rig.id AND rig.recipe_id = r.id 
-         AND rig.recipe_id = $1 AND ri.ingredient_id = $2 AND rig.name = $3 
-         AND r.author_id = (SELECT id FROM users WHERE iam_id = $4) 
-         RETURNING ri.*`,
-        [id, ingredientId, group, req.user.id.toString()],
-      );
-      if (result.rows.length === 0) {
-        return res
-          .status(404)
-          .json({ error: "Ingredient not found on recipe or unauthorized" });
-      }
-      res.json({ message: "Ingredient removed from recipe" });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/* PUT reorder groups. */
-router.put(
-  "/:id/groups/reorder",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id } = req.params;
-      const { ordered_group_ids } = req.body;
-
-      if (!Array.isArray(ordered_group_ids)) {
-        return res.status(400).json({ error: "ordered_group_ids must be an array" });
-      }
-
-      const recipeCheck = await pool.query(
-        "SELECT id FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $2)",
-        [id, req.user.id.toString()]
-      );
-      if (recipeCheck.rows.length === 0) {
-        return res.status(404).json({ error: "Recipe not found or unauthorized" });
-      }
-
-      await pool.query(
-        `UPDATE recipe_ingredient_groups rig
-         SET position = new_order.ordinality - 1
-         FROM unnest($1::int[]) WITH ORDINALITY AS new_order(group_id, ordinality)
-         WHERE rig.id = new_order.group_id AND rig.recipe_id = $2`,
-        [ordered_group_ids, id]
-      );
-      res.json({ message: "Groups reordered successfully" });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-/* PUT update group name. */
-router.put(
-  "/:id/groups/:groupId",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id, groupId } = req.params;
-      const { name } = req.body;
-      const result = await pool.query(
-        `UPDATE recipe_ingredient_groups rig
-         SET name = $1
-         FROM recipes r
-         WHERE rig.recipe_id = r.id AND rig.id = $2 AND rig.recipe_id = $3
-         AND r.author_id = (SELECT id FROM users WHERE iam_id = $4)
-         RETURNING rig.*`,
-        [name, groupId, id, req.user.id.toString()]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Group not found or unauthorized" });
-      }
-      res.json(result.rows[0]);
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-/* DELETE ingredient group. */
-router.delete(
-  "/:id/groups/:groupId",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id, groupId } = req.params;
-      const result = await pool.query(
-        `DELETE FROM recipe_ingredient_groups rig
-         USING recipes r
-         WHERE rig.recipe_id = r.id AND rig.id = $1 AND rig.recipe_id = $2
-         AND r.author_id = (SELECT id FROM users WHERE iam_id = $3)
-         RETURNING rig.*`,
-        [groupId, id, req.user.id.toString()]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Group not found or unauthorized" });
-      }
-      res.json({ message: "Group deleted successfully", group: result.rows[0] });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-/* PUT reorder ingredients. */
-router.put(
-  "/:id/ingredients/reorder",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id } = req.params;
-      const { ordered_ingredient_ids } = req.body;
-
-      if (!Array.isArray(ordered_ingredient_ids)) {
-        return res.status(400).json({ error: "ordered_ingredient_ids must be an array" });
-      }
-
-      const recipeCheck = await pool.query(
-        "SELECT id FROM recipes WHERE id = $1 AND author_id = (SELECT id FROM users WHERE iam_id = $2)",
-        [id, req.user.id.toString()]
-      );
-      if (recipeCheck.rows.length === 0) {
-        return res.status(404).json({ error: "Recipe not found or unauthorized" });
-      }
-
-      await pool.query(
-        `UPDATE recipe_ingredients ri
-         SET position = new_order.ordinality - 1
-         FROM unnest($1::int[]) WITH ORDINALITY AS new_order(recipe_ingredient_id, ordinality),
-              recipe_ingredient_groups rig
-         WHERE ri.id = new_order.recipe_ingredient_id
-           AND ri.group_id = rig.id
-           AND rig.recipe_id = $2`,
-        [ordered_ingredient_ids, id]
-      );
-      res.json({ message: "Ingredients reordered successfully" });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-/* PUT move ingredient to another group. */
-router.put(
-  "/:id/ingredients/:recipeIngredientId/move",
-  authenticateToken,
-  authorizePermissions(["write:data"]),
-  async function (req, res, next) {
-    try {
-      const { id, recipeIngredientId } = req.params;
-      const { group_id } = req.body;
-
-      const result = await pool.query(
-        `UPDATE recipe_ingredients ri
-         SET group_id = $1, position = (SELECT COALESCE(MAX(position) + 1, 0) FROM recipe_ingredients WHERE group_id = $1)
-         FROM recipe_ingredient_groups rig, recipes r
-         WHERE ri.id = $2 AND ri.group_id = rig.id AND rig.recipe_id = r.id
-         AND r.id = $3 AND r.author_id = (SELECT id FROM users WHERE iam_id = $4)
-         AND EXISTS (SELECT 1 FROM recipe_ingredient_groups WHERE id = $1 AND recipe_id = $3)
-         RETURNING ri.*`,
-        [group_id, recipeIngredientId, id, req.user.id.toString()]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Ingredient or target group not found, or unauthorized" });
-      }
-      res.json(result.rows[0]);
-    } catch (err) {
-      next(err);
-    }
-  }
 );
 
 module.exports = router;
