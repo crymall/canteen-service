@@ -536,22 +536,15 @@ describe('Recipes Routes', () => {
     });
   });
 
-  describe('POST /recipes with no ingredient_groups', () => {
-    it('should give the new recipe a Main bucket anyway', async () => {
-      pool._mockClient.query
-        .mockResolvedValueOnce({ rows: [] })                        // BEGIN
-        .mockResolvedValueOnce({ rows: [{ id: 9 }] })               // INSERT recipe
-        .mockResolvedValueOnce({ rows: [{ id: 80, position: 0 }] }) // INSERT groups
-        .mockResolvedValueOnce({ rows: [] });                       // COMMIT
-
+  describe('POST /recipes payload requirements', () => {
+    it('should reject a create that omits ingredient_groups entirely', async () => {
       const res = await request(app)
         .post('/recipes')
         .send({ title: 'Bare', instructions: 'Do it' });
 
-      expect(res.statusCode).toEqual(201);
-      const groupInsert = pool._mockClient.query.mock.calls.find((call) =>
-        call[0].includes('INSERT INTO recipe_ingredient_groups'));
-      expect(groupInsert[1]).toEqual([9, ['Main']]);
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.error).toContain('ingredient_groups is required');
+      expect(pool.connect).not.toHaveBeenCalled();
     });
 
     it('should still reject a group list that omits Main', async () => {

@@ -120,7 +120,10 @@ const formatRecipe = (recipe) => {
 
 const groupName = (group) => group?.name || UNGROUPED_GROUP_NAME;
 
-const recipePayloadError = ({ title, instructions, tags, ingredient_groups }) => {
+const recipePayloadError = (
+  { title, instructions, tags, ingredient_groups },
+  { ingredientGroupsRequired },
+) => {
   if (typeof title !== "string" || title.trim() === "") {
     return "A title is required.";
   }
@@ -133,7 +136,11 @@ const recipePayloadError = ({ title, instructions, tags, ingredient_groups }) =>
     return "tags must be an array of tag ids";
   }
 
-  if (ingredient_groups === undefined) return null;
+  if (ingredient_groups === undefined) {
+    return ingredientGroupsRequired
+      ? "ingredient_groups is required when creating a recipe"
+      : null;
+  }
   if (!Array.isArray(ingredient_groups)) {
     return "ingredient_groups must be an array";
   }
@@ -413,7 +420,9 @@ router.put(
       ingredient_groups,
     } = req.body;
 
-    const payloadError = recipePayloadError(req.body);
+    const payloadError = recipePayloadError(req.body, {
+      ingredientGroupsRequired: false,
+    });
     if (payloadError) {
       return res.status(400).json({ error: payloadError });
     }
@@ -497,7 +506,9 @@ router.post(
       ingredient_groups,
     } = req.body;
 
-    const payloadError = recipePayloadError(req.body);
+    const payloadError = recipePayloadError(req.body, {
+      ingredientGroupsRequired: true,
+    });
     if (payloadError) {
       return res.status(400).json({ error: payloadError });
     }
@@ -534,11 +545,7 @@ router.post(
       const recipe = result.rows[0];
 
       await insertRecipeTags(client, recipe.id, tags);
-      await insertIngredientGroups(
-        client,
-        recipe.id,
-        ingredient_groups ?? [{ name: UNGROUPED_GROUP_NAME, ingredients: [] }],
-      );
+      await insertIngredientGroups(client, recipe.id, ingredient_groups);
 
       await client.query("COMMIT");
       res.status(201).json(recipe);
