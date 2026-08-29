@@ -32,6 +32,9 @@ const singularUnit = (unit) => {
 };
 const sumMinutes = (...values) =>
   values.reduce((total, value) => total + (parseInt(value) || 0), 0);
+const groupName = (group) => group?.name || UNGROUPED_GROUP_NAME;
+const CREATE = "create";
+const UPDATE = "update";
 
 const recipeProjection = (viewerParam) => `
   r.*,
@@ -118,11 +121,9 @@ const formatRecipe = (recipe) => {
   return { ...recipe, ingredient_groups: formattedGroups };
 };
 
-const groupName = (group) => group?.name || UNGROUPED_GROUP_NAME;
-
 const recipePayloadError = (
   { title, instructions, tags, ingredient_groups },
-  { ingredientGroupsRequired },
+  operation,
 ) => {
   if (typeof title !== "string" || title.trim() === "") {
     return "A title is required.";
@@ -137,7 +138,7 @@ const recipePayloadError = (
   }
 
   if (ingredient_groups === undefined) {
-    return ingredientGroupsRequired
+    return operation === CREATE
       ? "ingredient_groups is required when creating a recipe"
       : null;
   }
@@ -420,9 +421,7 @@ router.put(
       ingredient_groups,
     } = req.body;
 
-    const payloadError = recipePayloadError(req.body, {
-      ingredientGroupsRequired: false,
-    });
+    const payloadError = recipePayloadError(req.body, UPDATE);
     if (payloadError) {
       return res.status(400).json({ error: payloadError });
     }
@@ -506,9 +505,7 @@ router.post(
       ingredient_groups,
     } = req.body;
 
-    const payloadError = recipePayloadError(req.body, {
-      ingredientGroupsRequired: true,
-    });
+    const payloadError = recipePayloadError(req.body, CREATE);
     if (payloadError) {
       return res.status(400).json({ error: payloadError });
     }
