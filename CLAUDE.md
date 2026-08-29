@@ -84,10 +84,14 @@ The cost is that those row ids churn on every save.
 
 | Status | Cause |
 | --- | --- |
-| `400` | missing `title` or `instructions`; non-array `tags`, `ingredient_groups` or `ingredients`; duplicate group name; the same ingredient twice in one group; dropping an existing `Main` group |
+| `400` | missing `title` or `instructions`; non-array `tags`, `ingredient_groups` or `ingredients`; duplicate group name; dropping an existing `Main` group |
 | `404` | the recipe does not exist, or the caller is not its author |
 
 Payload validation runs before the transaction opens; the `Main` check runs inside it, after the ownership gate, so it cannot be used to probe recipes the caller does not own.
 
-Two unique constraints back this up: `unique_recipe_group_name (recipe_id, name)` and `unique_group_ingredient (group_id, ingredient_id)`.
-Delete-then-insert inside one transaction never collides with either, but a payload carrying a duplicate would — hence the up-front validation, so those surface as a `400` rather than a constraint violation escaping as a `500`.
+`unique_recipe_group_name (recipe_id, name)` backs the group-name rule.
+Delete-then-insert inside one transaction never collides with it, but a payload naming two groups the same would — hence the up-front validation, so it surfaces as a `400` rather than a constraint violation escaping as a `500`.
+
+The same ingredient **may** appear more than once in a group, distinguished by its notes — `2 Eggs (beaten)` alongside `1 Egg (separated)`.
+`unique_group_ingredient` used to forbid that; `1780000000004_allow-repeated-ingredients-in-a-group` drops it, because replace-everything writes give it nothing left to protect.
+The ingredient filter on `GET /recipes` counts `DISTINCT ri.ingredient_id`, so repeats do not skew matching.

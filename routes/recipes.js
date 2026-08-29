@@ -122,11 +122,11 @@ const groupName = (group) => group?.name || UNGROUPED_GROUP_NAME;
 
 const recipePayloadError = ({ title, instructions, tags, ingredient_groups }) => {
   if (typeof title !== "string" || title.trim() === "") {
-    return "title is required";
+    return "A title is required.";
   }
 
   if (typeof instructions !== "string" || instructions.trim() === "") {
-    return "instructions are required";
+    return "Instructions are required.";
   }
 
   if (tags !== undefined && !Array.isArray(tags)) {
@@ -142,21 +142,13 @@ const recipePayloadError = ({ title, instructions, tags, ingredient_groups }) =>
   for (const group of ingredient_groups) {
     const name = groupName(group);
     if (seenGroupNames.has(name)) {
-      return `Ingredient groups must have distinct names, but "${name}" is used more than once`;
+      return `Two ingredient groups are both named "${name}". Give each group its own name.`;
     }
     seenGroupNames.add(name);
 
     if (group?.ingredients === undefined) continue;
     if (!Array.isArray(group.ingredients)) {
       return `Ingredients for group "${name}" must be an array`;
-    }
-
-    const seenIngredientIds = new Set();
-    for (const ingredient of group.ingredients) {
-      if (seenIngredientIds.has(ingredient?.id)) {
-        return `Group "${name}" lists the same ingredient more than once`;
-      }
-      seenIngredientIds.add(ingredient?.id);
     }
   }
 
@@ -468,7 +460,7 @@ router.put(
         if (existing.rows.length > 0 && !keepsUngrouped) {
           await client.query("ROLLBACK");
           return res.status(400).json({
-            error: `The "${UNGROUPED_GROUP_NAME}" ingredient group cannot be renamed or removed`,
+            error: `The "${UNGROUPED_GROUP_NAME}" ingredient group cannot be renamed or removed.`,
           });
         }
       }

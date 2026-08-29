@@ -433,26 +433,42 @@ describe('Recipes Routes', () => {
       });
 
       expect(res.statusCode).toEqual(400);
-      expect(res.body.error).toContain('distinct names');
+      expect(res.body.error).toContain('both named');
       expect(pool.connect).not.toHaveBeenCalled();
     });
 
-    it('should reject the same ingredient twice in one group', async () => {
+    it('should allow the same ingredient twice in one group', async () => {
+      pool._mockClient.query
+        .mockResolvedValueOnce({ rows: [] })                          // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 1 }] })                 // UPDATE recipes
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })             // existing Main lookup
+        .mockResolvedValueOnce({ rows: [] })                          // DELETE recipe_ingredient_groups
+        .mockResolvedValueOnce({ rows: [{ id: 60, position: 0 }] })   // INSERT groups
+        .mockResolvedValueOnce({ rows: [] })                          // INSERT recipe_ingredients
+        .mockResolvedValueOnce({ rows: [graphRow] })                  // SELECT graph
+        .mockResolvedValueOnce({ rows: [] });                         // COMMIT
+
       const res = await request(app).put('/recipes/1').send({
         title: 'Updated',
         instructions: 'Whisk',
-        ingredient_groups: [{ name: 'Main', ingredients: [{ id: 2 }, { id: 2 }] }],
+        ingredient_groups: [{ name: 'Main', ingredients: [
+          { id: 2, quantity: 2, notes: 'beaten' },
+          { id: 2, quantity: 1, notes: 'separated' },
+        ]}],
       });
 
-      expect(res.statusCode).toEqual(400);
-      expect(res.body.error).toContain('more than once');
-      expect(pool.connect).not.toHaveBeenCalled();
+      expect(res.statusCode).toEqual(200);
+      const insert = pool._mockClient.query.mock.calls.find((call) =>
+        call[0].includes('INSERT INTO recipe_ingredients'));
+      expect(insert[1][1]).toEqual([2, 2]);
+      expect(insert[1][4]).toEqual(['beaten', 'separated']);
+      expect(insert[1][5]).toEqual([0, 1]);
     });
 
     it('should reject a payload missing a NOT NULL column', async () => {
       const res = await request(app).put('/recipes/1').send({ title: 'Updated' });
       expect(res.statusCode).toEqual(400);
-      expect(res.body.error).toContain('instructions');
+      expect(res.body.error).toContain('Instructions are required');
       expect(pool.connect).not.toHaveBeenCalled();
     });
 
