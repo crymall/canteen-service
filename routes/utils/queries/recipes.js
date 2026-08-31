@@ -10,7 +10,7 @@ var {
   sumMinutes,
   singularUnit,
   groupName,
-} = require("../recipes");
+} = require("../recipeValues");
 
 const recipeProjection = (viewerPlaceholder) => `
   r.*,

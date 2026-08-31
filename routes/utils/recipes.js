@@ -4,20 +4,12 @@ var {
   UNIT_SYMBOLS_NEVER_PLURALIZED,
   CREATE,
 } = require("./constants");
+var { unitKey, groupName } = require("./recipeValues");
+var {
+  insertIngredientGroupsQuery,
+  insertRecipeIngredientsQuery,
+} = require("./queries/recipes");
 
-const nullIfBlank = (value) => (value === "" ? null : value);
-const unitKey = (unit) =>
-  typeof unit === "string" ? unit.trim().toLowerCase() : null;
-const singularUnit = (unit) => {
-  const trimmed = typeof unit === "string" ? unit.trim() : unit;
-  const value = nullIfBlank(trimmed) ?? null;
-  if (!value) return null;
-  if (UNIT_SYMBOLS_NEVER_PLURALIZED.has(unitKey(value))) return value;
-  return pluralize.singular(value);
-};
-const sumMinutes = (...values) =>
-  values.reduce((total, value) => total + (parseInt(value) || 0), 0);
-const groupName = (group) => group?.name || UNGROUPED_GROUP_NAME;
 const parseIdList = (input) => {
   if (!input) return [];
   if (Array.isArray(input)) return input.map(Number);
@@ -96,13 +88,6 @@ const recipePayloadError = (
 };
 
 const insertIngredientTree = async (client, recipeId, ingredientGroups) => {
-  // Required at call time, not module load: queries/recipes depends on the value
-  // normalizers above, so a top-level require here would close the cycle.
-  const {
-    insertIngredientGroupsQuery,
-    insertRecipeIngredientsQuery,
-  } = require("./queries/recipes");
-
   const insertGroups = insertIngredientGroupsQuery(recipeId, ingredientGroups);
   if (!insertGroups) return;
   const inserted = await client.query(insertGroups.text, insertGroups.values);
@@ -116,10 +101,6 @@ const insertIngredientTree = async (client, recipeId, ingredientGroups) => {
 };
 
 module.exports = {
-  nullIfBlank,
-  sumMinutes,
-  singularUnit,
-  groupName,
   parseIdList,
   formatRecipe,
   recipePayloadError,
