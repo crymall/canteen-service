@@ -17,6 +17,15 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+const optionalAuth = (req, res, next) => {
+  if (req.cookies?.token) {
+    return authenticateToken(req, res, next);
+  }
+  next();
+};
+
+const currentIamId = (req) => (req.user ? req.user.id.toString() : null);
+
 const authorizePermissions = (requiredPermissions) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -51,4 +60,10 @@ const authenticateApiKey = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticateToken, authorizePermissions, authenticateApiKey };
+module.exports = {
+  authenticateToken,
+  optionalAuth,
+  currentIamId,
+  authorizePermissions,
+  authenticateApiKey,
+};

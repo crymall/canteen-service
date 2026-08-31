@@ -4,37 +4,31 @@ var pool = require("../config/db");
 var {
   authenticateToken,
   authorizePermissions,
+  currentIamId,
 } = require("../middleware/authorize");
+var {
+  listsPageQuery,
+  listsByUserQuery,
+  listByIdQuery,
+  insertListQuery,
+  deleteListQuery,
+  listRecipesQuery,
+  insertListRecipeQuery,
+  deleteListRecipeQuery,
+} = require("./utils/queries/lists");
+var { pageBounds } = require("./utils/general");
 
 /* GET lists listing. */
 router.get("/", async function (req, res, next) {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-    const offset = parseInt(req.query.offset) || 0;
     const { name, sort, order } = req.query;
-
-    let query = "SELECT * FROM lists";
-    const params = [];
-    let paramCount = 1;
-
-    if (name) {
-      query += ` WHERE name ILIKE $${paramCount}`;
-      params.push(`%${name}%`);
-      paramCount++;
-    }
-
-    const validSorts = ["created_at", "updated_at"];
-    const sortBy = validSorts.includes(sort) ? sort : "created_at";
-    const validOrders = ["ASC", "DESC"];
-    const sortOrder = validOrders.includes((order || "").toUpperCase())
-      ? (order || "").toUpperCase()
-      : "DESC";
-
-    query += ` ORDER BY ${sortBy} ${sortOrder}`;
-    query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-    params.push(limit, offset);
-
-    const result = await pool.query(query, params);
+    const { text, values } = listsPageQuery({
+      name,
+      sort,
+      order,
+      ...pageBounds(req),
+    });
+    const result = await pool.query(text, values);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -44,33 +38,15 @@ router.get("/", async function (req, res, next) {
 /* GET lists for a specific user. */
 router.get("/user/:userId", async function (req, res, next) {
   try {
-    const { userId } = req.params;
-    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-    const offset = parseInt(req.query.offset) || 0;
     const { name, sort, order } = req.query;
-
-    let query = "SELECT * FROM lists WHERE user_id = $1";
-    const params = [userId];
-    let paramCount = 2;
-
-    if (name) {
-      query += ` AND name ILIKE $${paramCount}`;
-      params.push(`%${name}%`);
-      paramCount++;
-    }
-
-    const validSorts = ["created_at", "updated_at"];
-    const sortBy = validSorts.includes(sort) ? sort : "created_at";
-    const validOrders = ["ASC", "DESC"];
-    const sortOrder = validOrders.includes((order || "").toUpperCase())
-      ? (order || "").toUpperCase()
-      : "DESC";
-
-    query += ` ORDER BY ${sortBy} ${sortOrder}`;
-    query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-    params.push(limit, offset);
-
-    const result = await pool.query(query, params);
+    const { text, values } = listsByUserQuery({
+      userId: req.params.userId,
+      name,
+      sort,
+      order,
+      ...pageBounds(req),
+    });
+    const result = await pool.query(text, values);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -80,8 +56,8 @@ router.get("/user/:userId", async function (req, res, next) {
 /* GET single list. */
 router.get("/:id", async function (req, res, next) {
   try {
-    const { id } = req.params;
-    const result = await pool.query("SELECT * FROM lists WHERE id = $1", [id]);
+    const { text, values } = listByIdQuery(req.params.id);
+    const result = await pool.query(text, values);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "List not found" });
     }
@@ -98,11 +74,11 @@ router.delete(
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
-      const { id } = req.params;
-      const result = await pool.query(
-        "DELETE FROM lists WHERE id = $1 AND user_id = (SELECT id FROM users WHERE iam_id = $2) RETURNING *",
-        [id, req.user.id.toString()],
+      const { text, values } = deleteListQuery(
+        req.params.id,
+        currentIamId(req),
       );
+      const result = await pool.query(text, values);
       if (result.rows.length === 0) {
         return res
           .status(404)
@@ -122,13 +98,11 @@ router.post(
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
-      const { name } = req.body;
-      const result = await pool.query(
-        `INSERT INTO lists (user_id, name)
-         SELECT id, $2 FROM users WHERE iam_id = $1
-         RETURNING *`,
-        [req.user.id.toString(), name],
+      const { text, values } = insertListQuery(
+        currentIamId(req),
+        req.body.name,
       );
+      const result = await pool.query(text, values);
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
@@ -139,20 +113,11 @@ router.post(
 /* GET recipes in list. */
 router.get("/:id/recipes", async function (req, res, next) {
   try {
-    const { id } = req.params;
-    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-    const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query(
-      `
-      SELECT r.*
-      FROM recipes r
-      JOIN list_recipes lr ON r.id = lr.recipe_id
-      WHERE lr.list_id = $1
-      ORDER BY lr.added_at DESC, r.id DESC
-      LIMIT $2 OFFSET $3
-    `,
-      [id, limit, offset],
-    );
+    const { text, values } = listRecipesQuery({
+      listId: req.params.id,
+      ...pageBounds(req),
+    });
+    const result = await pool.query(text, values);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -166,15 +131,12 @@ router.post(
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
-      const { id } = req.params;
-      const { recipe_id } = req.body;
-      const result = await pool.query(
-        `INSERT INTO list_recipes (list_id, recipe_id)
-       SELECT $1, $2
-       WHERE EXISTS (SELECT 1 FROM lists WHERE id = $1 AND user_id = (SELECT id FROM users WHERE iam_id = $3))
-       RETURNING *`,
-        [id, recipe_id, req.user.id.toString()],
+      const { text, values } = insertListRecipeQuery(
+        req.params.id,
+        req.body.recipe_id,
+        currentIamId(req),
       );
+      const result = await pool.query(text, values);
       if (result.rows.length === 0) {
         return res
           .status(404)
@@ -197,11 +159,12 @@ router.delete(
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
-      const { id, recipeId } = req.params;
-      const result = await pool.query(
-        "DELETE FROM list_recipes lr USING lists l WHERE lr.list_id = l.id AND lr.list_id = $1 AND lr.recipe_id = $2 AND l.user_id = (SELECT id FROM users WHERE iam_id = $3) RETURNING lr.*",
-        [id, recipeId, req.user.id.toString()],
+      const { text, values } = deleteListRecipeQuery(
+        req.params.id,
+        req.params.recipeId,
+        currentIamId(req),
       );
+      const result = await pool.query(text, values);
       if (result.rows.length === 0) {
         return res
           .status(404)

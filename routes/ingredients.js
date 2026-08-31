@@ -1,50 +1,31 @@
 var express = require("express");
 var router = express.Router();
 var pool = require("../config/db");
-var pluralize = require("pluralize");
 var {
   authenticateToken,
   authorizePermissions,
 } = require("../middleware/authorize");
-
-const toTitleCase = (str) => {
-  return str
-    .toLowerCase()
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-};
+var { canonicalIngredientName } = require("./utils/ingredients");
+var {
+  ingredientsPageQuery,
+  insertIngredientQuery,
+  ingredientByNameQuery,
+} = require("./utils/queries/ingredients");
+var { pageBounds } = require("./utils/general");
 
 /* GET ingredients listing. */
-router.get(
-  "/",
-  async function (req, res, next) {
-    try {
-      const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-      const offset = parseInt(req.query.offset) || 0;
-      const { name } = req.query;
-
-      let query = "SELECT * FROM ingredients";
-      const params = [];
-      let paramCount = 1;
-
-      if (name) {
-        query += ` WHERE name ILIKE $${paramCount}`;
-        params.push(`%${name}%`);
-        paramCount++;
-      }
-
-      query += ` ORDER BY name ASC, id ASC`;
-      query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-      params.push(limit, offset);
-
-      const result = await pool.query(query, params);
-      res.json(result.rows);
-    } catch (err) {
-      next(err);
-    }
-  },
-);
+router.get("/", async function (req, res, next) {
+  try {
+    const { text, values } = ingredientsPageQuery({
+      name: req.query.name,
+      ...pageBounds(req),
+    });
+    const result = await pool.query(text, values);
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* POST new ingredient. */
 router.post(
@@ -53,15 +34,14 @@ router.post(
   authorizePermissions(["write:data"]),
   async function (req, res, next) {
     try {
-      const { name } = req.body;
-      const normalizedName = toTitleCase(pluralize.singular(name.trim()));
-      
-      let result = await pool.query(
-        "INSERT INTO ingredients (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING *",
-        [normalizedName],
-      );
+      const name = canonicalIngredientName(req.body.name);
+
+      const insert = insertIngredientQuery(name);
+      let result = await pool.query(insert.text, insert.values);
+
       if (result.rows.length === 0) {
-        result = await pool.query("SELECT * FROM ingredients WHERE name = $1", [normalizedName]);
+        const existing = ingredientByNameQuery(name);
+        result = await pool.query(existing.text, existing.values);
       }
       res.status(201).json(result.rows[0]);
     } catch (err) {
