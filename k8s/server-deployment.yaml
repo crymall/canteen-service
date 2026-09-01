@@ -52,6 +52,8 @@ spec:
             secretKeyRef:
               name: midden-global-secrets
               key: jwt_secret
+        - name: NODE_ENV
+          value: production
 ---
 apiVersion: v1
 kind: Service
