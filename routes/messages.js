@@ -13,10 +13,22 @@ var {
   messageThreadQuery,
   myMessagesQuery,
 } = require("./utils/queries/messages");
+var { numericParam } = require("./utils/validation/params");
+var {
+  messagePayloadError,
+  markReadPayloadError,
+} = require("./utils/validation/messages");
 var { pageBounds } = require("./utils/general");
+
+router.param("id", numericParam("id"));
 
 /* POST send a message. */
 router.post("/", authenticateToken, async function (req, res, next) {
+  const payloadError = messagePayloadError(req.body);
+  if (payloadError) {
+    return res.status(400).json({ error: payloadError });
+  }
+
   try {
     const { receiver_id, content, recipe_id, list_id } = req.body;
     const iamId = currentIamId(req);
@@ -43,14 +55,13 @@ router.post("/", authenticateToken, async function (req, res, next) {
 
 /* PUT mark messages as read/unread. */
 router.put("/read", authenticateToken, async function (req, res, next) {
+  const payloadError = markReadPayloadError(req.body);
+  if (payloadError) {
+    return res.status(400).json({ error: payloadError });
+  }
+
   try {
     const { message_ids, is_read } = req.body;
-
-    if (!Array.isArray(message_ids) || message_ids.length === 0) {
-      return res
-        .status(400)
-        .json({ error: "message_ids must be a non-empty array" });
-    }
 
     const markMessagesRead = markMessagesReadQuery({
       iamId: currentIamId(req),

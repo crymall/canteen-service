@@ -13,7 +13,10 @@ var {
   followingQuery,
   friendsQuery,
 } = require("./utils/queries/relationships");
+var { numericParam } = require("./utils/validation/params");
 var { pageBounds } = require("./utils/general");
+
+router.param("id", numericParam("id"));
 
 /* POST follow a user. */
 router.post("/:id", authenticateToken, async function (req, res, next) {

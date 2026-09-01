@@ -12,6 +12,7 @@ var {
   ingredientByNameQuery,
 } = require("./utils/queries/ingredients");
 var { pageBounds } = require("./utils/general");
+var { ingredientPayloadError } = require("./utils/validation/ingredients");
 
 /* GET ingredients listing. */
 router.get("/", async function (req, res, next) {
@@ -33,6 +34,11 @@ router.post(
   authenticateToken,
   authorizePermissions("write:data"),
   async function (req, res, next) {
+    const payloadError = ingredientPayloadError(req.body);
+    if (payloadError) {
+      return res.status(400).json({ error: payloadError });
+    }
+
     try {
       const name = canonicalIngredientName(req.body.name);
 
