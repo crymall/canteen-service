@@ -7,8 +7,8 @@ const DEFAULT_SORT_DIRECTION = "DESC";
 
 const listOrdering = (sort, order) => {
   const column = SORTABLE_COLUMNS.includes(sort) ? sort : DEFAULT_SORT_COLUMN;
-  const direction = SORT_DIRECTIONS.includes((order || "").toUpperCase())
-    ? (order || "").toUpperCase()
+  const direction = SORT_DIRECTIONS.includes(order)
+    ? order
     : DEFAULT_SORT_DIRECTION;
   return `${column} ${direction}`;
 };

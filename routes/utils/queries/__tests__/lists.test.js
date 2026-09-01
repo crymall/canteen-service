@@ -11,8 +11,18 @@ describe('listsPageQuery', () => {
   });
 
   it('honours a sort column and direction it recognizes', () => {
-    expect(listsPageQuery({ ...PAGE, sort: 'updated_at', order: 'asc' }).text)
+    expect(listsPageQuery({ ...PAGE, sort: 'updated_at', order: 'ASC' }).text)
       .toContain('ORDER BY updated_at ASC');
+  });
+
+  it('requires the exact casing of a sort column and direction', () => {
+    expect(listsPageQuery({ ...PAGE, sort: 'Updated_At', order: 'asc' }).text)
+      .toContain('ORDER BY created_at DESC');
+  });
+
+  it('falls back to the default when a parameter repeats in the query string', () => {
+    expect(listsPageQuery({ ...PAGE, sort: ['created_at', 'updated_at'], order: ['ASC', 'DESC'] }).text)
+      .toContain('ORDER BY created_at DESC');
   });
 
   it('falls back to the default rather than interpolating an unknown column', () => {
