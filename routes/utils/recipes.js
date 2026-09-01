@@ -90,14 +90,14 @@ const recipePayloadError = (
 const insertIngredientTree = async (client, recipeId, ingredientGroups) => {
   const insertGroups = insertIngredientGroupsQuery(recipeId, ingredientGroups);
   if (!insertGroups) return;
-  const inserted = await client.query(insertGroups.text, insertGroups.values);
+  const inserted = await client.query(insertGroups);
 
   const insertIngredients = insertRecipeIngredientsQuery(
     inserted.rows,
     ingredientGroups,
   );
   if (!insertIngredients) return;
-  await client.query(insertIngredients.text, insertIngredients.values);
+  await client.query(insertIngredients);
 };
 
 module.exports = {

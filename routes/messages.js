@@ -21,21 +21,20 @@ router.post("/", authenticateToken, async function (req, res, next) {
     const { receiver_id, content, recipe_id, list_id } = req.body;
     const iamId = currentIamId(req);
 
-    const friendship = friendshipQuery(iamId, receiver_id);
-    const friendCheck = await pool.query(friendship.text, friendship.values);
+    const friendCheck = await pool.query(friendshipQuery(iamId, receiver_id));
 
     if (friendCheck.rows.length === 0) {
       return res.status(403).json({ error: "You can only message friends" });
     }
 
-    const { text, values } = insertMessageQuery({
+    const insertMessage = insertMessageQuery({
       iamId,
       receiver_id,
       content,
       recipe_id,
       list_id,
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(insertMessage);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     next(err);
@@ -53,12 +52,12 @@ router.put("/read", authenticateToken, async function (req, res, next) {
         .json({ error: "message_ids must be a non-empty array" });
     }
 
-    const { text, values } = markMessagesReadQuery({
+    const markMessagesRead = markMessagesReadQuery({
       iamId: currentIamId(req),
       messageIds: message_ids,
       isRead: is_read === undefined ? true : !!is_read,
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(markMessagesRead);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -68,11 +67,11 @@ router.put("/read", authenticateToken, async function (req, res, next) {
 /* GET conversation threads (Inbox). */
 router.get("/threads", authenticateToken, async function (req, res, next) {
   try {
-    const { text, values } = messageThreadsQuery({
+    const messageThreads = messageThreadsQuery({
       iamId: currentIamId(req),
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(messageThreads);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -82,12 +81,12 @@ router.get("/threads", authenticateToken, async function (req, res, next) {
 /* GET messages from one thread. */
 router.get("/:id", authenticateToken, async function (req, res, next) {
   try {
-    const { text, values } = messageThreadQuery({
+    const messageThread = messageThreadQuery({
       iamId: currentIamId(req),
       otherUserId: req.params.id,
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(messageThread);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -97,11 +96,11 @@ router.get("/:id", authenticateToken, async function (req, res, next) {
 /* GET my messages. */
 router.get("/", authenticateToken, async function (req, res, next) {
   try {
-    const { text, values } = myMessagesQuery({
+    const myMessages = myMessagesQuery({
       iamId: currentIamId(req),
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(myMessages);
     res.json(result.rows);
   } catch (err) {
     next(err);

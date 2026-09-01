@@ -122,7 +122,7 @@ describe("Authorization Middleware", () => {
 
   describe("authorizePermissions", () => {
     it("should return 401 if user is not authenticated", () => {
-      const middleware = authorizePermissions(["read:data"]);
+      const middleware = authorizePermissions("read:data");
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(401);
@@ -134,7 +134,7 @@ describe("Authorization Middleware", () => {
 
     it("should return 403 if user lacks required permission", () => {
       req.user = { permissions: ["read:other"] };
-      const middleware = authorizePermissions(["read:data"]);
+      const middleware = authorizePermissions("read:data");
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
@@ -148,7 +148,7 @@ describe("Authorization Middleware", () => {
 
     it("should call next() if user has required permission", () => {
       req.user = { permissions: ["read:data", "write:data"] };
-      const middleware = authorizePermissions(["read:data"]);
+      const middleware = authorizePermissions("read:data");
       middleware(req, res, next);
 
       expect(next).toHaveBeenCalled();

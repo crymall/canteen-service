@@ -41,7 +41,7 @@ router.get("/", optionalAuth, async function (req, res, next) {
         .json({ error: "Authentication required for feed" });
     }
 
-    const { text, values } = recipeSearchQuery({
+    const recipeSearch = recipeSearchQuery({
       title,
       ids: parseIdList(req.query.ids),
       tags: parseIdList(req.query.tags),
@@ -51,7 +51,7 @@ router.get("/", optionalAuth, async function (req, res, next) {
       ...pageBounds(req),
     });
 
-    const result = await pool.query(text, values);
+    const result = await pool.query(recipeSearch);
     res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
@@ -61,11 +61,11 @@ router.get("/", optionalAuth, async function (req, res, next) {
 /* GET recipes sorted by likes. */
 router.get("/popular", optionalAuth, async function (req, res, next) {
   try {
-    const { text, values } = popularRecipesQuery({
+    const popularRecipes = popularRecipesQuery({
       viewerIamId: currentIamId(req),
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(popularRecipes);
     res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
@@ -75,12 +75,12 @@ router.get("/popular", optionalAuth, async function (req, res, next) {
 /* GET recipes by user. */
 router.get("/user/:userId", optionalAuth, async function (req, res, next) {
   try {
-    const { text, values } = recipesByAuthorQuery({
+    const recipesByAuthor = recipesByAuthorQuery({
       authorId: req.params.userId,
       viewerIamId: currentIamId(req),
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(recipesByAuthor);
     res.json(result.rows.map(formatRecipe));
   } catch (err) {
     next(err);
@@ -90,11 +90,11 @@ router.get("/user/:userId", optionalAuth, async function (req, res, next) {
 /* GET single recipe. */
 router.get("/:id", optionalAuth, async function (req, res, next) {
   try {
-    const { text, values } = selectRecipeGraphQuery(
+    const selectRecipeGraph = selectRecipeGraphQuery(
       req.params.id,
       currentIamId(req),
     );
-    const result = await pool.query(text, values);
+    const result = await pool.query(selectRecipeGraph);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Recipe not found" });
     }
@@ -108,7 +108,7 @@ router.get("/:id", optionalAuth, async function (req, res, next) {
 router.put(
   "/:id",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     const payloadError = recipePayloadError(req.body, UPDATE);
     if (payloadError) {
@@ -124,7 +124,7 @@ router.put(
       await client.query("BEGIN");
 
       const update = updateRecipeQuery({ ...req.body, id, iamId });
-      const updated = await client.query(update.text, update.values);
+      const updated = await client.query(update);
 
       if (updated.rows.length === 0) {
         await client.query("ROLLBACK");
@@ -134,23 +134,20 @@ router.put(
       }
 
       if (tags !== undefined) {
-        const clearTags = deleteRecipeTagsQuery(id);
-        await client.query(clearTags.text, clearTags.values);
+        await client.query(deleteRecipeTagsQuery(id));
 
         const insertTags = insertRecipeTagsQuery(id, tags);
         if (insertTags) {
-          await client.query(insertTags.text, insertTags.values);
+          await client.query(insertTags);
         }
       }
 
       if (ingredient_groups !== undefined) {
-        const clearGroups = deleteIngredientGroupsQuery(id);
-        await client.query(clearGroups.text, clearGroups.values);
+        await client.query(deleteIngredientGroupsQuery(id));
         await insertIngredientTree(client, id, ingredient_groups);
       }
 
-      const graph = selectRecipeGraphQuery(id, iamId);
-      const recipe = await client.query(graph.text, graph.values);
+      const recipe = await client.query(selectRecipeGraphQuery(id, iamId));
 
       await client.query("COMMIT");
       res.json(formatRecipe(recipe.rows[0]));
@@ -167,7 +164,7 @@ router.put(
 router.post(
   "/",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     const payloadError = recipePayloadError(req.body, CREATE);
     if (payloadError) {
@@ -184,7 +181,7 @@ router.post(
         ...req.body,
         iamId: currentIamId(req),
       });
-      const result = await client.query(insert.text, insert.values);
+      const result = await client.query(insert);
 
       if (result.rows.length === 0) {
         await client.query("ROLLBACK");
@@ -197,7 +194,7 @@ router.post(
 
       const insertTags = insertRecipeTagsQuery(recipe.id, tags);
       if (insertTags) {
-        await client.query(insertTags.text, insertTags.values);
+        await client.query(insertTags);
       }
 
       await insertIngredientTree(client, recipe.id, ingredient_groups);
@@ -217,14 +214,14 @@ router.post(
 router.delete(
   "/:id",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = deleteRecipeQuery(
+      const deleteRecipe = deleteRecipeQuery(
         req.params.id,
         currentIamId(req),
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(deleteRecipe);
       if (result.rows.length === 0) {
         return res
           .status(404)
@@ -244,14 +241,14 @@ router.delete(
 router.post(
   "/:id/likes",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = insertRecipeLikeQuery(
+      const insertRecipeLike = insertRecipeLikeQuery(
         req.params.id,
         currentIamId(req),
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(insertRecipeLike);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: "User or Recipe not found" });
       }
@@ -266,14 +263,14 @@ router.post(
 router.delete(
   "/:id/likes",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = deleteRecipeLikeQuery(
+      const deleteRecipeLike = deleteRecipeLikeQuery(
         req.params.id,
         currentIamId(req),
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(deleteRecipeLike);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: "Like not found" });
       }

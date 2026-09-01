@@ -16,11 +16,11 @@ var { pageBounds } = require("./utils/general");
 /* GET ingredients listing. */
 router.get("/", async function (req, res, next) {
   try {
-    const { text, values } = ingredientsPageQuery({
+    const ingredientsPage = ingredientsPageQuery({
       name: req.query.name,
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(ingredientsPage);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -31,17 +31,15 @@ router.get("/", async function (req, res, next) {
 router.post(
   "/",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
       const name = canonicalIngredientName(req.body.name);
 
-      const insert = insertIngredientQuery(name);
-      let result = await pool.query(insert.text, insert.values);
+      let result = await pool.query(insertIngredientQuery(name));
 
       if (result.rows.length === 0) {
-        const existing = ingredientByNameQuery(name);
-        result = await pool.query(existing.text, existing.values);
+        result = await pool.query(ingredientByNameQuery(name));
       }
       res.status(201).json(result.rows[0]);
     } catch (err) {

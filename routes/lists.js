@@ -22,13 +22,13 @@ var { pageBounds } = require("./utils/general");
 router.get("/", async function (req, res, next) {
   try {
     const { name, sort, order } = req.query;
-    const { text, values } = listsPageQuery({
+    const listsPage = listsPageQuery({
       name,
       sort,
       order,
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(listsPage);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -39,14 +39,14 @@ router.get("/", async function (req, res, next) {
 router.get("/user/:userId", async function (req, res, next) {
   try {
     const { name, sort, order } = req.query;
-    const { text, values } = listsByUserQuery({
+    const listsByUser = listsByUserQuery({
       userId: req.params.userId,
       name,
       sort,
       order,
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(listsByUser);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -56,8 +56,7 @@ router.get("/user/:userId", async function (req, res, next) {
 /* GET single list. */
 router.get("/:id", async function (req, res, next) {
   try {
-    const { text, values } = listByIdQuery(req.params.id);
-    const result = await pool.query(text, values);
+    const result = await pool.query(listByIdQuery(req.params.id));
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "List not found" });
     }
@@ -71,14 +70,14 @@ router.get("/:id", async function (req, res, next) {
 router.delete(
   "/:id",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = deleteListQuery(
+      const deleteList = deleteListQuery(
         req.params.id,
         currentIamId(req),
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(deleteList);
       if (result.rows.length === 0) {
         return res
           .status(404)
@@ -95,14 +94,14 @@ router.delete(
 router.post(
   "/",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = insertListQuery(
+      const insertList = insertListQuery(
         currentIamId(req),
         req.body.name,
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(insertList);
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
@@ -113,11 +112,11 @@ router.post(
 /* GET recipes in list. */
 router.get("/:id/recipes", async function (req, res, next) {
   try {
-    const { text, values } = listRecipesQuery({
+    const listRecipes = listRecipesQuery({
       listId: req.params.id,
       ...pageBounds(req),
     });
-    const result = await pool.query(text, values);
+    const result = await pool.query(listRecipes);
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -128,15 +127,15 @@ router.get("/:id/recipes", async function (req, res, next) {
 router.post(
   "/:id/recipes",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = insertListRecipeQuery(
+      const insertListRecipe = insertListRecipeQuery(
         req.params.id,
         req.body.recipe_id,
         currentIamId(req),
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(insertListRecipe);
       if (result.rows.length === 0) {
         return res
           .status(404)
@@ -156,15 +155,15 @@ router.post(
 router.delete(
   "/:id/recipes/:recipeId",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { text, values } = deleteListRecipeQuery(
+      const deleteListRecipe = deleteListRecipeQuery(
         req.params.id,
         req.params.recipeId,
         currentIamId(req),
       );
-      const result = await pool.query(text, values);
+      const result = await pool.query(deleteListRecipe);
       if (result.rows.length === 0) {
         return res
           .status(404)

@@ -21,8 +21,7 @@ const DEFAULT_LIST_NAME = "Favorites";
 /* GET users listing. */
 router.get("/", async function (req, res, next) {
   try {
-    const { text, values } = usersPageQuery(pageBounds(req));
-    const result = await pool.query(text, values);
+    const result = await pool.query(usersPageQuery(pageBounds(req)));
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -32,8 +31,7 @@ router.get("/", async function (req, res, next) {
 /* GET logged-in user data. */
 router.get("/me", authenticateToken, async function (req, res, next) {
   try {
-    const { text, values } = userByIamIdQuery(currentIamId(req));
-    const result = await pool.query(text, values);
+    const result = await pool.query(userByIamIdQuery(currentIamId(req)));
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found in local database" });
     }
@@ -45,8 +43,7 @@ router.get("/me", authenticateToken, async function (req, res, next) {
 
 router.get("/:id", async function (req, res, next) {
   try {
-    const { text, values } = userByIdQuery(req.params.id);
-    const result = await pool.query(text, values);
+    const result = await pool.query(userByIdQuery(req.params.id));
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -63,12 +60,10 @@ router.post("/", authenticateApiKey, async function (req, res, next) {
     await client.query("BEGIN");
     const { iam_id, username } = req.body;
 
-    const insertUser = insertUserQuery(iam_id, username);
-    const result = await client.query(insertUser.text, insertUser.values);
+    const result = await client.query(insertUserQuery(iam_id, username));
     const user = result.rows[0];
 
-    const insertList = insertListForUserQuery(user.id, DEFAULT_LIST_NAME);
-    await client.query(insertList.text, insertList.values);
+    await client.query(insertListForUserQuery(user.id, DEFAULT_LIST_NAME));
 
     await client.query("COMMIT");
     res.status(201).json(user);
@@ -86,8 +81,7 @@ router.delete(
   authenticateApiKey,
   async function (req, res, next) {
     try {
-      const { text, values } = deleteUserByIamIdQuery(req.params.iam_id);
-      const result = await pool.query(text, values);
+      const result = await pool.query(deleteUserByIamIdQuery(req.params.iam_id));
 
       if (result.rowCount === 0) {
         return res.status(404).json({ error: "User not found" });

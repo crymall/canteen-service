@@ -16,6 +16,10 @@ jest.mock('../../config/db', () => {
 
 jest.mock('../../middleware/authorize');
 
+const sqlOf = (call) =>
+  typeof call[0] === "string" ? call[0] : call[0].text;
+const valuesOf = (call) => call[0].values;
+
 describe('Recipes Routes', () => {
   afterEach(() => {
     jest.clearAllMocks();
@@ -35,7 +39,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes?title=Soup&tags=1,2&ingredients=3');
       
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('r.title ILIKE');
       expect(query).toContain('recipe_tags');
       expect(params[0]).toBe('%Soup%');
@@ -45,7 +49,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes?ids=1,2,3');
 
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('r.id = ANY');
       expect(params[0]).toEqual([1, 2, 3]);
     });
@@ -54,7 +58,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes');
 
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('AS liked_by_current_user');
       expect(params[params.length - 1]).toBeNull();
     });
@@ -63,7 +67,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes').set('Cookie', 'token=a.b.c');
 
-      const [, params] = pool.query.mock.calls[0];
+      const [{ values: params }] = pool.query.mock.calls[0];
       expect(params[params.length - 1]).toBe('1'); // req.user.id stringified
     });
 
@@ -71,7 +75,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes');
 
-      const [query] = pool.query.mock.calls[0];
+      const [{ text: query }] = pool.query.mock.calls[0];
       expect(query).toContain('ORDER BY r.created_at DESC, r.id DESC');
     });
 
@@ -79,7 +83,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes');
 
-      const [query] = pool.query.mock.calls[0];
+      const [{ text: query }] = pool.query.mock.calls[0];
       expect(query).toContain('LEFT JOIN users u ON r.author_id = u.id');
     });
   });
@@ -182,7 +186,7 @@ describe('Recipes Routes', () => {
     it('should return recipes sorted by likes', async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get('/recipes/popular');
-      const [query] = pool.query.mock.calls[0];
+      const [{ text: query }] = pool.query.mock.calls[0];
       expect(query).toContain('ORDER BY r.like_count DESC, r.id DESC');
     });
   });
@@ -195,7 +199,7 @@ describe('Recipes Routes', () => {
       const res = await request(app).get('/recipes/user/1');
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockRecipes);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('WHERE r.author_id = $1');
       expect(params[0]).toBe('1');
     });
@@ -247,9 +251,9 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(200);
 
       const calls = pool._mockClient.query.mock.calls;
-      const statements = calls.map((call) => call[0]);
+      const statements = calls.map(sqlOf);
       const paramsFor = (fragment) =>
-        calls.find((call) => call[0].includes(fragment))[1];
+        valuesOf(calls.find((call) => sqlOf(call).includes(fragment)));
 
       expect(statements[0]).toBe('BEGIN');
       expect(statements[statements.length - 1]).toBe('COMMIT');
@@ -300,8 +304,8 @@ describe('Recipes Routes', () => {
       });
 
       const insert = pool._mockClient.query.mock.calls.find((call) =>
-        call[0].includes('INSERT INTO recipe_ingredients'));
-      expect(insert[1][3]).toEqual(['cup', 'Tbsp', null]);
+        sqlOf(call).includes('INSERT INTO recipe_ingredients'));
+      expect(valuesOf(insert)[3]).toEqual(['cup', 'Tbsp', null]);
     });
 
     it('should respond with the full recipe graph rather than the bare row', async () => {
@@ -327,7 +331,7 @@ describe('Recipes Routes', () => {
       const res = await request(app).put('/recipes/1').send({ title: 'Updated', instructions: 'Whisk' });
       expect(res.statusCode).toEqual(200);
 
-      const statements = pool._mockClient.query.mock.calls.map((call) => call[0]);
+      const statements = pool._mockClient.query.mock.calls.map(sqlOf);
       expect(statements.some((sql) => sql.includes('DELETE FROM recipe_tags'))).toBe(false);
       expect(statements.some((sql) => sql.includes('DELETE FROM recipe_ingredient_groups'))).toBe(false);
     });
@@ -345,7 +349,7 @@ describe('Recipes Routes', () => {
         .send({ title: 'Updated', instructions: 'Whisk', tags: [] });
       expect(res.statusCode).toEqual(200);
 
-      const statements = pool._mockClient.query.mock.calls.map((call) => call[0]);
+      const statements = pool._mockClient.query.mock.calls.map(sqlOf);
       expect(statements.some((sql) => sql.includes('DELETE FROM recipe_tags'))).toBe(true);
       expect(statements.some((sql) => sql.includes('INSERT INTO recipe_tags'))).toBe(false);
     });
@@ -359,7 +363,7 @@ describe('Recipes Routes', () => {
       const res = await request(app).put('/recipes/999').send(fullPayload);
       expect(res.statusCode).toEqual(404);
 
-      const statements = pool._mockClient.query.mock.calls.map((call) => call[0]);
+      const statements = pool._mockClient.query.mock.calls.map(sqlOf);
       expect(statements).toContain('ROLLBACK');
       expect(statements.some((sql) => sql.includes('DELETE FROM recipe_tags'))).toBe(false);
       expect(pool._mockClient.release).toHaveBeenCalled();
@@ -422,10 +426,10 @@ describe('Recipes Routes', () => {
 
       expect(res.statusCode).toEqual(200);
       const insert = pool._mockClient.query.mock.calls.find((call) =>
-        call[0].includes('INSERT INTO recipe_ingredients'));
-      expect(insert[1][1]).toEqual([2, 2]);
-      expect(insert[1][4]).toEqual(['beaten', 'separated']);
-      expect(insert[1][5]).toEqual([0, 1]);
+        sqlOf(call).includes('INSERT INTO recipe_ingredients'));
+      expect(valuesOf(insert)[1]).toEqual([2, 2]);
+      expect(valuesOf(insert)[4]).toEqual(['beaten', 'separated']);
+      expect(valuesOf(insert)[5]).toEqual([0, 1]);
     });
 
     it('should reject a payload missing a NOT NULL column', async () => {
@@ -450,7 +454,7 @@ describe('Recipes Routes', () => {
 
       const res = await request(app).put('/recipes/1').send(fullPayload);
       expect(res.statusCode).toEqual(500);
-      expect(pool._mockClient.query.mock.calls.map((call) => call[0])).toContain('ROLLBACK');
+      expect(pool._mockClient.query.mock.calls.map(sqlOf)).toContain('ROLLBACK');
       expect(pool._mockClient.release).toHaveBeenCalled();
     });
   });
@@ -464,7 +468,7 @@ describe('Recipes Routes', () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual({ message: 'Recipe deleted successfully', recipe: mockDeletedRecipe });
       
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('DELETE FROM recipes');
       expect(params[0]).toBe('1'); // req.params.id
       expect(params[1]).toBe('1'); // req.user.id stringified
@@ -512,20 +516,20 @@ describe('Recipes Routes', () => {
       expect(res.body).toEqual(newRecipe);
 
       const clientCalls = pool._mockClient.query.mock.calls;
-      expect(clientCalls[0][0]).toBe('BEGIN');
-      expect(clientCalls[1][0]).toContain('INSERT INTO recipes');
-      expect(clientCalls[1][1][0]).toBe('1'); // req.user.id stringified
-      expect(clientCalls[1][1][7]).toBe(15); // total_time_minutes
-      expect(clientCalls[2][0]).toContain('INSERT INTO recipe_tags');
-      expect(clientCalls[2][1]).toEqual([1, [5]]);
-      expect(clientCalls[3][0]).toContain('INSERT INTO recipe_ingredient_groups');
-      expect(clientCalls[3][1]).toEqual([1, ['Main', 'Sauce']]);
-      expect(clientCalls[4][0]).toContain('INSERT INTO recipe_ingredients');
+      expect(sqlOf(clientCalls[0])).toBe('BEGIN');
+      expect(sqlOf(clientCalls[1])).toContain('INSERT INTO recipes');
+      expect(valuesOf(clientCalls[1])[0]).toBe('1'); // req.user.id stringified
+      expect(valuesOf(clientCalls[1])[7]).toBe(15); // total_time_minutes
+      expect(sqlOf(clientCalls[2])).toContain('INSERT INTO recipe_tags');
+      expect(valuesOf(clientCalls[2])).toEqual([1, [5]]);
+      expect(sqlOf(clientCalls[3])).toContain('INSERT INTO recipe_ingredient_groups');
+      expect(valuesOf(clientCalls[3])).toEqual([1, ['Main', 'Sauce']]);
+      expect(sqlOf(clientCalls[4])).toContain('INSERT INTO recipe_ingredients');
       // RETURNING row order is not guaranteed, so group ids map back by position.
-      expect(clientCalls[4][1][0]).toEqual([50, 51]);
-      expect(clientCalls[4][1][1]).toEqual([2, 3]);
-      expect(clientCalls[4][1][5]).toEqual([0, 0]);
-      expect(clientCalls[5][0]).toBe('COMMIT');
+      expect(valuesOf(clientCalls[4])[0]).toEqual([50, 51]);
+      expect(valuesOf(clientCalls[4])[1]).toEqual([2, 3]);
+      expect(valuesOf(clientCalls[4])[5]).toEqual([0, 0]);
+      expect(sqlOf(clientCalls[5])).toBe('COMMIT');
     });
   });
 
@@ -560,7 +564,7 @@ describe('Recipes Routes', () => {
       const res = await request(app).post('/recipes/1/likes');
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(mockLike);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(params[0]).toBe('1'); // req.user.id stringified
     });
   });
@@ -570,7 +574,7 @@ describe('Recipes Routes', () => {
       pool.query.mockResolvedValue({ rows: [{ recipe_id: 1 }] });
       const res = await request(app).delete('/recipes/1/likes');
       expect(res.statusCode).toEqual(200);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('DELETE FROM recipe_likes');
       expect(params[1]).toBe('1'); // req.user.id stringified
     });
