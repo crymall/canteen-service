@@ -7,14 +7,7 @@ jest.mock("../../config/db", () => ({
   query: jest.fn(),
 }));
 
-jest.mock("../../middleware/authorize", () => ({
-  authenticateToken: (req, res, next) => {
-    req.user = { id: 1 }; // Mock logged-in user with ID 1
-    next();
-  },
-  authorizePermissions: (permissions) => (req, res, next) => next(),
-  authenticateApiKey: (req, res, next) => next(),
-}));
+jest.mock('../../middleware/authorize');
 
 describe("Messages Routes", () => {
   afterEach(() => {
@@ -61,10 +54,10 @@ describe("Messages Routes", () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockUpdatedMessages);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE messages"),
-        [true, [1], "1"]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("UPDATE messages"),
+        values: [true, [1], "1"],
+      });
     });
 
     it("should return 400 if message_ids is invalid", async () => {
@@ -85,19 +78,19 @@ describe("Messages Routes", () => {
       const res = await request(app).get("/messages/threads");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockThreads);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("WITH last_messages AS"),
-        ["1", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("WITH last_messages AS"),
+        values: ["1", 50, 0],
+      });
     });
 
     it("should handle pagination params", async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get("/messages/threads?limit=10&offset=5");
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("WITH last_messages AS"),
-        ["1", 10, 5]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("WITH last_messages AS"),
+        values: ["1", 10, 5],
+      });
     });
   });
 
@@ -109,19 +102,19 @@ describe("Messages Routes", () => {
       const res = await request(app).get("/messages/2");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockMessages);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT m.*"),
-        ["1", "2", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT m.*"),
+        values: ["1", "2", 50, 0],
+      });
     });
 
     it("should handle pagination params", async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get("/messages/2?limit=10&offset=5");
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT m.*"),
-        ["1", "2", 10, 5]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT m.*"),
+        values: ["1", "2", 10, 5],
+      });
     });
   });
 
@@ -133,19 +126,19 @@ describe("Messages Routes", () => {
       const res = await request(app).get("/messages");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockMessages);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT m.*"),
-        ["1", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT m.*"),
+        values: ["1", 50, 0],
+      });
     });
 
     it("should handle pagination params", async () => {
       pool.query.mockResolvedValue({ rows: [] });
       await request(app).get("/messages?limit=10&offset=5");
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT m.*"),
-        ["1", 10, 5]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT m.*"),
+        values: ["1", 10, 5],
+      });
     });
   });
 });

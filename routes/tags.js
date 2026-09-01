@@ -5,16 +5,13 @@ var {
   authenticateToken,
   authorizePermissions,
 } = require("../middleware/authorize");
+var { tagsPageQuery, insertTagQuery } = require("./utils/queries/tags");
+var { pageBounds } = require("./utils/general");
 
 /* GET tags listing. */
 router.get("/", async function (req, res, next) {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-    const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query("SELECT * FROM tags ORDER BY name ASC, id ASC LIMIT $1 OFFSET $2", [
-      limit,
-      offset,
-    ]);
+    const result = await pool.query(tagsPageQuery(pageBounds(req)));
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -25,14 +22,10 @@ router.get("/", async function (req, res, next) {
 router.post(
   "/",
   authenticateToken,
-  authorizePermissions(["write:data"]),
+  authorizePermissions("write:data"),
   async function (req, res, next) {
     try {
-      const { name } = req.body;
-      const result = await pool.query(
-        "INSERT INTO tags (name) VALUES ($1) RETURNING *",
-        [name],
-      );
+      const result = await pool.query(insertTagQuery(req.body.name));
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);

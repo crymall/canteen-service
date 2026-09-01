@@ -7,14 +7,7 @@ jest.mock("../../config/db", () => ({
   query: jest.fn(),
 }));
 
-jest.mock("../../middleware/authorize", () => ({
-  authenticateToken: (req, res, next) => {
-    req.user = { id: 1 }; // Mock logged-in user with ID 1
-    next();
-  },
-  authorizePermissions: (permissions) => (req, res, next) => next(),
-  authenticateApiKey: (req, res, next) => next(),
-}));
+jest.mock('../../middleware/authorize');
 
 describe("Relationships Routes", () => {
   afterEach(() => {
@@ -28,10 +21,10 @@ describe("Relationships Routes", () => {
       
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual({ message: "Followed successfully" });
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("INSERT INTO follows"),
-        ["1", "2"]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("INSERT INTO follows"),
+        values: ["1", "2"],
+      });
     });
 
     it("should prevent following yourself", async () => {
@@ -49,10 +42,10 @@ describe("Relationships Routes", () => {
       
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual({ message: "Unfollowed successfully" });
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("DELETE FROM follows"),
-        ["1", "2"]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("DELETE FROM follows"),
+        values: ["1", "2"],
+      });
     });
   });
 
@@ -64,10 +57,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/counts");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockCounts);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT COUNT(*)"),
-        ["2"]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT COUNT(*)"),
+        values: ["2"],
+      });
     });
   });
 
@@ -79,10 +72,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/followers");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFollowers);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT u.id, u.username FROM follows"),
-        ["2", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT u.id, u.username FROM follows"),
+        values: ["2", 50, 0],
+      });
     });
 
     it("should filter followers by id if provided", async () => {
@@ -92,10 +85,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/followers?id=3");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFollowers);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("AND u.id = $2"),
-        ["2", "3", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("AND u.id = $2"),
+        values: ["2", "3", 50, 0],
+      });
     });
   });
 
@@ -107,10 +100,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/following");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFollowing);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT u.id, u.username FROM follows"),
-        ["2", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT u.id, u.username FROM follows"),
+        values: ["2", 50, 0],
+      });
     });
   });
 
@@ -122,10 +115,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/friends");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFriends);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT u.id, u.username FROM users"),
-        ["2", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("SELECT u.id, u.username FROM users"),
+        values: ["2", 50, 0],
+      });
     });
 
     it("should filter friends by query if provided", async () => {
@@ -135,10 +128,10 @@ describe("Relationships Routes", () => {
       const res = await request(app).get("/relationships/2/friends?query=user");
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockFriends);
-      expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("AND u.username ILIKE $2"),
-        ["2", "%user%", 50, 0]
-      );
+      expect(pool.query).toHaveBeenCalledWith({
+        text: expect.stringContaining("AND u.username ILIKE $2"),
+        values: ["2", "%user%", 50, 0],
+      });
     });
   });
 });

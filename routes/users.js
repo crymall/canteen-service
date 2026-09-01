@@ -1,17 +1,27 @@
 var express = require("express");
 var router = express.Router();
 var pool = require("../config/db");
-var { authenticateApiKey, authenticateToken } = require("../middleware/authorize");
+var {
+  authenticateApiKey,
+  authenticateToken,
+  currentIamId,
+} = require("../middleware/authorize");
+var {
+  usersPageQuery,
+  userByIamIdQuery,
+  userByIdQuery,
+  insertUserQuery,
+  insertListForUserQuery,
+  deleteUserByIamIdQuery,
+} = require("./utils/queries/users");
+var { pageBounds } = require("./utils/general");
+
+const DEFAULT_LIST_NAME = "Favorites";
 
 /* GET users listing. */
 router.get("/", async function (req, res, next) {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
-    const offset = parseInt(req.query.offset) || 0;
-    const result = await pool.query("SELECT id, username FROM users ORDER BY id ASC LIMIT $1 OFFSET $2", [
-      limit,
-      offset,
-    ]);
+    const result = await pool.query(usersPageQuery(pageBounds(req)));
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -21,9 +31,7 @@ router.get("/", async function (req, res, next) {
 /* GET logged-in user data. */
 router.get("/me", authenticateToken, async function (req, res, next) {
   try {
-    const result = await pool.query("SELECT * FROM users WHERE iam_id = $1", [
-      req.user.id.toString(),
-    ]);
+    const result = await pool.query(userByIamIdQuery(currentIamId(req)));
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found in local database" });
     }
@@ -35,8 +43,7 @@ router.get("/me", authenticateToken, async function (req, res, next) {
 
 router.get("/:id", async function (req, res, next) {
   try {
-    const { id } = req.params;
-    const result = await pool.query("SELECT id, username FROM users WHERE id = $1", [id]);
+    const result = await pool.query(userByIdQuery(req.params.id));
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -52,16 +59,11 @@ router.post("/", authenticateApiKey, async function (req, res, next) {
   try {
     await client.query("BEGIN");
     const { iam_id, username } = req.body;
-    const result = await client.query(
-      "INSERT INTO users (iam_id, username) VALUES ($1, $2) RETURNING *",
-      [iam_id, username],
-    );
+
+    const result = await client.query(insertUserQuery(iam_id, username));
     const user = result.rows[0];
 
-    await client.query("INSERT INTO lists (user_id, name) VALUES ($1, $2)", [
-      user.id,
-      "Favorites",
-    ]);
+    await client.query(insertListForUserQuery(user.id, DEFAULT_LIST_NAME));
 
     await client.query("COMMIT");
     res.status(201).json(user);
@@ -74,18 +76,21 @@ router.post("/", authenticateApiKey, async function (req, res, next) {
 });
 
 /* DELETE user sync webhook. */
-router.delete("/sync/:iam_id", authenticateApiKey, async function (req, res, next) {
-  try {
-    const { iam_id } = req.params;
-    const result = await pool.query("DELETE FROM users WHERE iam_id = $1 RETURNING *", [iam_id]);
-    
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "User not found" });
+router.delete(
+  "/sync/:iam_id",
+  authenticateApiKey,
+  async function (req, res, next) {
+    try {
+      const result = await pool.query(deleteUserByIamIdQuery(req.params.iam_id));
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ message: "User deleted", user: result.rows[0] });
+    } catch (err) {
+      next(err);
     }
-    res.json({ message: "User deleted", user: result.rows[0] });
-  } catch (err) {
-    next(err);
-  }
-});
+  },
+);
 
 module.exports = router;

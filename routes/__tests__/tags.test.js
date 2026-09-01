@@ -6,11 +6,7 @@ jest.mock('../../config/db', () => ({
   query: jest.fn(),
 }));
 
-jest.mock('../../middleware/authorize', () => ({
-  authenticateToken: (req, res, next) => next(),
-  authorizePermissions: (permissions) => (req, res, next) => next(),
-  authenticateApiKey: (req, res, next) => next(),
-}));
+jest.mock('../../middleware/authorize');
 
 describe('Tags Routes', () => {
   afterEach(() => {

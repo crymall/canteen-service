@@ -4,6 +4,15 @@ Route-by-route reference for `routes/recipes.js`.
 
 TODO: Document the remaining routes.
 
+## Route and query layout
+
+Routes carry HTTP concerns only: status codes, transaction boundaries, and request parsing.
+Every SQL string is assembled by a named function in `routes/utils/queries/<resource>.js` that returns `{ text, values }` and never reaches the database.
+A builder with nothing to write returns `null`, and the route skips the query.
+
+Dynamic filters bind through `queryParameters()` in `routes/utils/general.js`.
+`addParameter(value)` records a value and returns the `$N` naming its slot, so a placeholder and the value it stands for are assigned in a single expression.
+
 ## The recipe object
 
 Every recipe read returns the same shape, assembled by `recipeProjection` and finished by `formatRecipe`.
@@ -62,8 +71,9 @@ A quantity above one pluralizes the unit, or the ingredient name when there is n
 
 ## GET routes
 
-All four are readable anonymously.
-`optionalAuth` reads the cookie when one is present, which is what makes `liked_by_current_user` meaningful.
+All four answer without a signed-in caller.
+`optionalAuth` (in `middleware/authorize.js`) verifies the cookie when one is present, which is what makes `liked_by_current_user` meaningful.
+A caller sending no cookie reads anonymously; a caller whose cookie fails verification gets `403`.
 The three list routes take `limit` (capped at 50) and `offset`.
 
 | Route | Purpose | Notes |

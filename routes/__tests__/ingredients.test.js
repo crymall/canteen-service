@@ -6,11 +6,7 @@ jest.mock('../../config/db', () => ({
   query: jest.fn(),
 }));
 
-jest.mock('../../middleware/authorize', () => ({
-  authenticateToken: (req, res, next) => next(),
-  authorizePermissions: (permissions) => (req, res, next) => next(),
-  authenticateApiKey: (req, res, next) => next(),
-}));
+jest.mock('../../middleware/authorize');
 
 describe('Ingredients Routes', () => {
   afterEach(() => {
@@ -25,7 +21,7 @@ describe('Ingredients Routes', () => {
       const res = await request(app).get('/ingredients');
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockIngredients);
-      expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM ingredients'), expect.any(Array));
+      expect(pool.query).toHaveBeenCalledWith({ text: expect.stringContaining('SELECT * FROM ingredients'), values: expect.any(Array) });
     });
 
     it('should filter ingredients by name', async () => {
@@ -35,7 +31,7 @@ describe('Ingredients Routes', () => {
       const res = await request(app).get('/ingredients?name=Salt');
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockIngredients);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('WHERE name ILIKE $1');
       expect(params[0]).toBe('%Salt%');
     });
@@ -56,7 +52,7 @@ describe('Ingredients Routes', () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newIngredient);
 
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('INSERT INTO ingredients');
       expect(params[0]).toBe('Sweet Potato');
     });
@@ -71,8 +67,8 @@ describe('Ingredients Routes', () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(existingIngredient);
       
-      expect(pool.query.mock.calls[1][0]).toContain('SELECT * FROM ingredients');
-      expect(pool.query.mock.calls[1][1][0]).toBe('Apple');
+      expect(pool.query.mock.calls[1][0].text).toContain('SELECT * FROM ingredients');
+      expect(pool.query.mock.calls[1][0].values[0]).toBe('Apple');
     });
   });
 });

@@ -1,6 +1,8 @@
 const jwt = require("jsonwebtoken");
 const {
   authenticateToken,
+  optionalAuth,
+  currentIamId,
   authorizePermissions,
   authenticateApiKey,
 } = require("../authorize");
@@ -69,9 +71,58 @@ describe("Authorization Middleware", () => {
     });
   });
 
+  describe("optionalAuth", () => {
+    it("should call next() without a user when no token is present", () => {
+      optionalAuth(req, res, next);
+
+      expect(req.user).toBeUndefined();
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+      expect(jwt.verify).not.toHaveBeenCalled();
+    });
+
+    it("should populate req.user when a valid token is present", () => {
+      req.cookies.token = "valid_token";
+      const mockUser = { id: 1, username: "test" };
+
+      jwt.verify.mockImplementation((token, secret, cb) => {
+        cb(null, mockUser);
+      });
+
+      optionalAuth(req, res, next);
+
+      expect(req.user).toEqual(mockUser);
+      expect(next).toHaveBeenCalled();
+    });
+
+    it("should reject a present but invalid token rather than reading anonymously", () => {
+      req.cookies.token = "expired_token";
+
+      jwt.verify.mockImplementation((token, secret, cb) => {
+        cb(new Error("jwt expired"), null);
+      });
+
+      optionalAuth(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("currentIamId", () => {
+    it("should stringify the id of a signed-in caller", () => {
+      req.user = { id: 1 };
+      expect(currentIamId(req)).toBe("1");
+    });
+
+    it("should answer null for an anonymous caller", () => {
+      expect(currentIamId(req)).toBeNull();
+    });
+  });
+
   describe("authorizePermissions", () => {
     it("should return 401 if user is not authenticated", () => {
-      const middleware = authorizePermissions(["read:data"]);
+      const middleware = authorizePermissions("read:data");
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(401);
@@ -83,7 +134,7 @@ describe("Authorization Middleware", () => {
 
     it("should return 403 if user lacks required permission", () => {
       req.user = { permissions: ["read:other"] };
-      const middleware = authorizePermissions(["read:data"]);
+      const middleware = authorizePermissions("read:data");
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
@@ -97,7 +148,7 @@ describe("Authorization Middleware", () => {
 
     it("should call next() if user has required permission", () => {
       req.user = { permissions: ["read:data", "write:data"] };
-      const middleware = authorizePermissions(["read:data"]);
+      const middleware = authorizePermissions("read:data");
       middleware(req, res, next);
 
       expect(next).toHaveBeenCalled();

@@ -14,14 +14,11 @@ jest.mock('../../config/db', () => {
   };
 });
 
-jest.mock('../../middleware/authorize', () => ({
-  authenticateToken: (req, res, next) => {
-    req.user = { id: 1 };
-    next();
-  },
-  authorizePermissions: (permissions) => (req, res, next) => next(),
-  authenticateApiKey: (req, res, next) => next(),
-}));
+jest.mock('../../middleware/authorize');
+
+const sqlOf = (call) =>
+  typeof call[0] === "string" ? call[0] : call[0].text;
+const valuesOf = (call) => call[0].values;
 
 describe('Users Routes', () => {
   afterEach(() => {
@@ -47,10 +44,7 @@ describe('Users Routes', () => {
       const res = await request(app).get('/users/me');
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual(mockUser);
-      expect(pool.query).toHaveBeenCalledWith(
-        'SELECT * FROM users WHERE iam_id = $1',
-        ['1']
-      );
+      expect(pool.query).toHaveBeenCalledWith({ text: 'SELECT * FROM users WHERE iam_id = $1', values: ['1'] });
     });
 
     it('should return 404 if user not found in local database', async () => {
@@ -96,11 +90,11 @@ describe('Users Routes', () => {
       expect(res.body).toEqual(newUser);
       
       const clientCalls = pool._mockClient.query.mock.calls;
-      expect(clientCalls[0][0]).toBe('BEGIN');
-      expect(clientCalls[1][0]).toContain('INSERT INTO users');
-      expect(clientCalls[2][0]).toContain('INSERT INTO lists');
-      expect(clientCalls[2][1]).toEqual([2, 'Favorites']);
-      expect(clientCalls[3][0]).toBe('COMMIT');
+      expect(sqlOf(clientCalls[0])).toBe('BEGIN');
+      expect(sqlOf(clientCalls[1])).toContain('INSERT INTO users');
+      expect(sqlOf(clientCalls[2])).toContain('INSERT INTO lists');
+      expect(valuesOf(clientCalls[2])).toEqual([2, 'Favorites']);
+      expect(sqlOf(clientCalls[3])).toBe('COMMIT');
     });
   });
 
@@ -114,10 +108,7 @@ describe('Users Routes', () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.message).toEqual('User deleted');
       expect(res.body.user).toEqual(deletedUser);
-      expect(pool.query).toHaveBeenCalledWith(
-        'DELETE FROM users WHERE iam_id = $1 RETURNING *',
-        ['iam_123']
-      );
+      expect(pool.query).toHaveBeenCalledWith({ text: 'DELETE FROM users WHERE iam_id = $1 RETURNING *', values: ['iam_123'] });
     });
 
     it('should return 404 if user to delete is not found', async () => {

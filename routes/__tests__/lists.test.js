@@ -6,14 +6,7 @@ jest.mock('../../config/db', () => ({
   query: jest.fn(),
 }));
 
-jest.mock('../../middleware/authorize', () => ({
-  authenticateToken: (req, res, next) => {
-    req.user = { id: 1 };
-    next();
-  },
-  authorizePermissions: (permissions) => (req, res, next) => next(),
-  authenticateApiKey: (req, res, next) => next(),
-}));
+jest.mock('../../middleware/authorize');
 
 describe('Lists Routes', () => {
   afterEach(() => {
@@ -67,7 +60,7 @@ describe('Lists Routes', () => {
       const res = await request(app).post('/lists').send({ name: 'Party Prep' });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(newList);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(params[0]).toBe('1'); // req.user.id stringified
     });
   });
@@ -80,7 +73,7 @@ describe('Lists Routes', () => {
       const res = await request(app).delete('/lists/1');
       expect(res.statusCode).toEqual(200);
       expect(res.body).toEqual({ message: 'List deleted successfully', list: deletedList });
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(params[1]).toBe('1');
     });
 
@@ -110,7 +103,7 @@ describe('Lists Routes', () => {
       const res = await request(app).post('/lists/1/recipes').send({ recipe_id: 10 });
       expect(res.statusCode).toEqual(201);
       expect(res.body).toEqual(mockRelation);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(query).toContain('WHERE EXISTS');
       expect(params[2]).toBe('1'); // req.user.id stringified
     });
@@ -131,7 +124,7 @@ describe('Lists Routes', () => {
       pool.query.mockResolvedValue({ rows: [{ list_id: 1, recipe_id: 10 }] });
       const res = await request(app).delete('/lists/1/recipes/10');
       expect(res.statusCode).toEqual(200);
-      const [query, params] = pool.query.mock.calls[0];
+      const [{ text: query, values: params }] = pool.query.mock.calls[0];
       expect(params[2]).toBe('1'); // req.user.id stringified
     });
   });
