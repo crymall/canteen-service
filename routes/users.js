@@ -14,7 +14,11 @@ var {
   insertListForUserQuery,
   deleteUserByIamIdQuery,
 } = require("./utils/queries/users");
+var { numericParam } = require("./utils/validation/params");
+var { userPayloadError } = require("./utils/validation/users");
 var { pageBounds } = require("./utils/general");
+
+router.param("id", numericParam("id"));
 
 const DEFAULT_LIST_NAME = "Favorites";
 
@@ -55,6 +59,11 @@ router.get("/:id", async function (req, res, next) {
 
 /* POST new user. */
 router.post("/", authenticateApiKey, async function (req, res, next) {
+  const payloadError = userPayloadError(req.body);
+  if (payloadError) {
+    return res.status(400).json({ error: payloadError });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

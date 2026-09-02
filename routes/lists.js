@@ -16,7 +16,16 @@ var {
   insertListRecipeQuery,
   deleteListRecipeQuery,
 } = require("./utils/queries/lists");
+var { numericParam } = require("./utils/validation/params");
+var {
+  listPayloadError,
+  listRecipePayloadError,
+} = require("./utils/validation/lists");
 var { pageBounds } = require("./utils/general");
+
+router.param("id", numericParam("id"));
+router.param("userId", numericParam("userId"));
+router.param("recipeId", numericParam("recipeId"));
 
 /* GET lists listing. */
 router.get("/", async function (req, res, next) {
@@ -96,6 +105,11 @@ router.post(
   authenticateToken,
   authorizePermissions("write:data"),
   async function (req, res, next) {
+    const payloadError = listPayloadError(req.body);
+    if (payloadError) {
+      return res.status(400).json({ error: payloadError });
+    }
+
     try {
       const insertList = insertListQuery(
         currentIamId(req),
@@ -129,6 +143,11 @@ router.post(
   authenticateToken,
   authorizePermissions("write:data"),
   async function (req, res, next) {
+    const payloadError = listRecipePayloadError(req.body);
+    if (payloadError) {
+      return res.status(400).json({ error: payloadError });
+    }
+
     try {
       const insertListRecipe = insertListRecipeQuery(
         req.params.id,

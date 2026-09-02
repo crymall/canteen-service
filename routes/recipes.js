@@ -8,10 +8,10 @@ var {
   currentIamId,
 } = require("../middleware/authorize");
 var { CREATE, UPDATE } = require("./utils/constants");
+var { numericParam, parsedIdList } = require("./utils/validation/params");
+var { recipePayloadError } = require("./utils/validation/recipes");
 var {
-  parseIdList,
   formatRecipe,
-  recipePayloadError,
   insertIngredientTree,
 } = require("./utils/recipes");
 var {
@@ -30,6 +30,9 @@ var {
 } = require("./utils/queries/recipes");
 var { pageBounds } = require("./utils/general");
 
+router.param("id", numericParam("id"));
+router.param("userId", numericParam("userId"));
+
 /* GET recipes listing. */
 router.get("/", optionalAuth, async function (req, res, next) {
   try {
@@ -41,11 +44,27 @@ router.get("/", optionalAuth, async function (req, res, next) {
         .json({ error: "Authentication required for feed" });
     }
 
+    const ids = parsedIdList(req.query.ids);
+    const tags = parsedIdList(req.query.tags);
+    const ingredients = parsedIdList(req.query.ingredients);
+
+    const unparsableFilter = [
+      ["ids", ids],
+      ["tags", tags],
+      ["ingredients", ingredients],
+    ].find(([, parsed]) => parsed === null);
+
+    if (unparsableFilter) {
+      return res.status(400).json({
+        error: `${unparsableFilter[0]} must be a comma-separated list of numbers.`,
+      });
+    }
+
     const recipeSearch = recipeSearchQuery({
       title,
-      ids: parseIdList(req.query.ids),
-      tags: parseIdList(req.query.tags),
-      ingredients: parseIdList(req.query.ingredients),
+      ids,
+      tags,
+      ingredients,
       feed,
       viewerIamId: currentIamId(req),
       ...pageBounds(req),
