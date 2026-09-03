@@ -1,9 +1,25 @@
-const messagePayloadError = ({ receiver_id, content }) => {
-  if (!Number.isInteger(Number(receiver_id)) || Number(receiver_id) <= 0) {
+const isSupplied = (value) => value !== undefined && value !== null;
+
+const isPositiveInteger = (value) =>
+  Number.isInteger(Number(value)) && Number(value) > 0;
+
+const messagePayloadError = ({ receiver_id, content, recipe_id, list_id }) => {
+  if (!isPositiveInteger(receiver_id)) {
     return "receiver_id must be a number.";
   }
-  if (typeof content !== "string" || content.trim() === "") {
-    return "A message needs content.";
+  if (isSupplied(recipe_id) && !isPositiveInteger(recipe_id)) {
+    return "recipe_id must be a number.";
+  }
+  if (isSupplied(list_id) && !isPositiveInteger(list_id)) {
+    return "list_id must be a number.";
+  }
+  if (isSupplied(content) && typeof content !== "string") {
+    return "content must be text.";
+  }
+  const hasWrittenContent = typeof content === "string" && content.trim() !== "";
+  const hasSharedItem = isSupplied(recipe_id) || isSupplied(list_id);
+  if (!hasWrittenContent && !hasSharedItem) {
+    return "A message needs content, a recipe, or a list.";
   }
   return null;
 };

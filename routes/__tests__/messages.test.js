@@ -30,6 +30,31 @@ describe("Messages Routes", () => {
       expect(res.body).toEqual(mockMessage);
     });
 
+    it("should send a shared recipe with no content", async () => {
+      pool.query.mockResolvedValueOnce({ rows: [{ 1: 1 }] });
+      const mockMessage = { id: 2, content: null, recipe_id: 7, sender_id: 1, receiver_id: 2 };
+      pool.query.mockResolvedValueOnce({ rows: [mockMessage] });
+
+      const res = await request(app)
+        .post("/messages")
+        .send({ receiver_id: 2, recipe_id: 7 });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body).toEqual(mockMessage);
+      expect(pool.query).toHaveBeenLastCalledWith({
+        text: expect.stringContaining("INSERT INTO messages"),
+        values: ["1", 2, null, 7, null],
+      });
+    });
+
+    it("should return 400 if a message has neither content nor something to share", async () => {
+      const res = await request(app).post("/messages").send({ receiver_id: 2 });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.error).toBe("A message needs content, a recipe, or a list.");
+      expect(pool.query).not.toHaveBeenCalled();
+    });
+
     it("should return 403 if users are not friends", async () => {
       // Mock friend check returning empty (not friends)
       pool.query.mockResolvedValueOnce({ rows: [] });

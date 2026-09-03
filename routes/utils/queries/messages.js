@@ -7,6 +7,9 @@ const friendshipQuery = (iamId, otherUserId) => ({
   values: [iamId, otherUserId],
 });
 
+const writtenContentOrNull = (content) =>
+  typeof content === "string" && content.trim() !== "" ? content : null;
+
 const insertMessageQuery = ({
   iamId,
   receiver_id,
@@ -17,7 +20,13 @@ const insertMessageQuery = ({
   text: `INSERT INTO messages (sender_id, receiver_id, content, recipe_id, list_id) 
        SELECT id, $2, $3, $4, $5 FROM users WHERE iam_id = $1 
        RETURNING *`,
-  values: [iamId, receiver_id, content, recipe_id, list_id],
+  values: [
+    iamId,
+    receiver_id,
+    writtenContentOrNull(content),
+    recipe_id ?? null,
+    list_id ?? null,
+  ],
 });
 
 const markMessagesReadQuery = ({ iamId, messageIds, isRead }) => ({

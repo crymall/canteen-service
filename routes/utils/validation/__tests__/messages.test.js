@@ -5,13 +5,42 @@ describe('messagePayloadError', () => {
     expect(messagePayloadError({ receiver_id: 2, content: 'Try this one' })).toBeNull();
   });
 
+  it('accepts a shared recipe with no written content', () => {
+    expect(messagePayloadError({ receiver_id: 2, recipe_id: 7 })).toBeNull();
+  });
+
+  it('accepts a shared list with no written content', () => {
+    expect(messagePayloadError({ receiver_id: 2, list_id: 7 })).toBeNull();
+  });
+
+  it('accepts a shared recipe alongside written content', () => {
+    expect(messagePayloadError({ receiver_id: 2, content: 'Look at this', recipe_id: 7 }))
+      .toBeNull();
+  });
+
   it.each([undefined, 'abc', 0, -1])('rejects receiver_id %p', (receiver_id) => {
     expect(messagePayloadError({ receiver_id, content: 'hi' }))
       .toBe('receiver_id must be a number.');
   });
 
-  it.each([undefined, '', '   ', 5])('rejects content %p', (content) => {
-    expect(messagePayloadError({ receiver_id: 2, content })).toBe('A message needs content.');
+  it.each(['abc', 0, -1])('rejects recipe_id %p', (recipe_id) => {
+    expect(messagePayloadError({ receiver_id: 2, recipe_id }))
+      .toBe('recipe_id must be a number.');
+  });
+
+  it.each(['abc', 0, -1])('rejects list_id %p', (list_id) => {
+    expect(messagePayloadError({ receiver_id: 2, list_id }))
+      .toBe('list_id must be a number.');
+  });
+
+  it('rejects content that is not text', () => {
+    expect(messagePayloadError({ receiver_id: 2, content: 5, recipe_id: 7 }))
+      .toBe('content must be text.');
+  });
+
+  it.each([undefined, '', '   '])('rejects an empty message %p', (content) => {
+    expect(messagePayloadError({ receiver_id: 2, content }))
+      .toBe('A message needs content, a recipe, or a list.');
   });
 });
 
